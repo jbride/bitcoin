@@ -53,7 +53,6 @@ class MockBitcoinPqcNative implements BitcoinPqcNative {
       secretKey: 32,
       signature: 64,
     },
-    [Algorithm.FN_DSA_512]: { publicKey: 897, secretKey: 1281, signature: 666 }, // Average size
     [Algorithm.ML_DSA_44]: {
       publicKey: 1312,
       secretKey: 2528,

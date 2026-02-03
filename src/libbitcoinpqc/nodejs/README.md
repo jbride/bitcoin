@@ -7,10 +7,9 @@ TypeScript bindings for the [libbitcoinpqc](https://github.com/bitcoin/libbitcoi
 - Full TypeScript support with typings
 - Clean, ergonomic API
 - Compatible with NodeJS 16+
-- Works with all three PQC algorithms:
+- Works with both PQC algorithms:
   - ML-DSA-44 (formerly CRYSTALS-Dilithium)
   - SLH-DSA-Shake-128s (formerly SPHINCS+)
-  - FN-DSA-512 (formerly FALCON)
 
 ## Installation
 
@@ -58,12 +57,10 @@ verify(keypair.publicKey, message, signature.bytes);
 enum Algorithm {
   /** BIP-340 Schnorr + X-Only - Elliptic Curve Digital Signature Algorithm */
   SECP256K1_SCHNORR = 0,
-  /** FN-DSA-512 (FALCON) - Fast Fourier lattice-based signature scheme */
-  FN_DSA_512 = 1,
   /** ML-DSA-44 (CRYSTALS-Dilithium) - Lattice-based signature scheme */
-  ML_DSA_44 = 2,
+  ML_DSA_44 = 1,
   /** SLH-DSA-Shake-128s (SPHINCS+) - Hash-based signature scheme */
-  SLH_DSA_SHAKE_128S = 3
+  SLH_DSA_SHAKE_128S = 2
 }
 ```
 
@@ -150,11 +147,10 @@ Verify a signature using the specified public key. Throws a `PqcError` if verifi
 
 ## Algorithm Characteristics
 
-| Algorithm | Public Key Size | Secret Key Size | Signature Size | Security Level |
-|-----------|----------------|----------------|----------------|----------------|
-| ML-DSA-44 | 1,312 bytes | 2,528 bytes | 2,420 bytes | NIST Level 2 |
-| SLH-DSA-Shake-128s | 32 bytes | 64 bytes | 7,856 bytes | NIST Level 1 |
-| FN-DSA-512 | 897 bytes | 1,281 bytes | ~666 bytes (average) | NIST Level 1 |
+| Algorithm          | Public Key Size | Secret Key Size | Signature Size | Security Level |
+| ------------------ | --------------- | --------------- | -------------- | -------------- |
+| ML-DSA-44          | 1,312 bytes     | 2,528 bytes     | 2,420 bytes    | NIST Level 2   |
+| SLH-DSA-Shake-128s | 32 bytes        | 64 bytes        | 7,856 bytes    | NIST Level 1   |
 
 ## Security Notes
 

@@ -4,57 +4,42 @@
       "target_name": "bitcoinpqc",
       "sources": [
         "src/native/bitcoinpqc_addon.cc",
-        "../src/bitcoinpqc.c",
-        "../src/ml_dsa/keygen.c",
-        "../src/ml_dsa/sign.c",
-        "../src/ml_dsa/verify.c",
-        "../src/ml_dsa/utils.c",
-        "../src/slh_dsa/keygen.c",
-        "../src/slh_dsa/sign.c",
-        "../src/slh_dsa/verify.c",
-        "../src/slh_dsa/utils.c",
-        "../src/fn_dsa/keygen.c",
-        "../src/fn_dsa/sign.c",
-        "../src/fn_dsa/verify.c",
-        "../src/fn_dsa/utils.c",
-        "../dilithium/ref/sign.c",
-        "../dilithium/ref/packing.c",
-        "../dilithium/ref/polyvec.c",
-        "../dilithium/ref/poly.c",
-        "../dilithium/ref/ntt.c",
-        "../dilithium/ref/reduce.c",
-        "../dilithium/ref/rounding.c",
-        "../dilithium/ref/fips202.c",
-        "../dilithium/ref/symmetric-shake.c",
-        "../dilithium/ref/randombytes_custom.c",
-        "../sphincsplus/ref/address.c",
-        "../sphincsplus/ref/fors.c",
-        "../sphincsplus/ref/hash_shake.c",
-        "../sphincsplus/ref/merkle.c",
-        "../sphincsplus/ref/sign.c",
-        "../sphincsplus/ref/thash_shake_simple.c",
-        "../sphincsplus/ref/utils.c",
-        "../sphincsplus/ref/utilsx1.c",
-        "../sphincsplus/ref/wots.c",
-        "../sphincsplus/ref/wotsx1.c",
-        "../sphincsplus/ref/fips202.c",
-        "../falcon/codec.c",
-        "../falcon/common.c",
-        "../falcon/falcon.c",
-        "../falcon/fft.c",
-        "../falcon/fpr.c",
-        "../falcon/keygen.c",
-        "../falcon/shake.c",
-        "../falcon/sign.c",
-        "../falcon/vrfy.c",
-        "../falcon/rng.c"
+        "src/c_sources/bitcoinpqc.c",
+        "src/c_sources/ml_dsa/keygen.c",
+        "src/c_sources/ml_dsa/sign.c",
+        "src/c_sources/ml_dsa/verify.c",
+        "src/c_sources/ml_dsa/utils.c",
+        "src/c_sources/slh_dsa/keygen.c",
+        "src/c_sources/slh_dsa/sign.c",
+        "src/c_sources/slh_dsa/verify.c",
+        "src/c_sources/slh_dsa/utils.c",
+        "src/c_sources/dilithium_ref/sign.c",
+        "src/c_sources/dilithium_ref/packing.c",
+        "src/c_sources/dilithium_ref/polyvec.c",
+        "src/c_sources/dilithium_ref/poly.c",
+        "src/c_sources/dilithium_ref/ntt.c",
+        "src/c_sources/dilithium_ref/reduce.c",
+        "src/c_sources/dilithium_ref/rounding.c",
+        "src/c_sources/dilithium_ref/fips202.c",
+        "src/c_sources/dilithium_ref/symmetric-shake.c",
+        "src/c_sources/randombytes_custom.c",
+        "src/c_sources/sphincsplus_ref/address.c",
+        "src/c_sources/sphincsplus_ref/fors.c",
+        "src/c_sources/sphincsplus_ref/hash_shake.c",
+        "src/c_sources/sphincsplus_ref/merkle.c",
+        "src/c_sources/sphincsplus_ref/sign.c",
+        "src/c_sources/sphincsplus_ref/thash_shake_simple.c",
+        "src/c_sources/sphincsplus_ref/utils.c",
+        "src/c_sources/sphincsplus_ref/utilsx1.c",
+        "src/c_sources/sphincsplus_ref/wots.c",
+        "src/c_sources/sphincsplus_ref/wotsx1.c",
+        "src/c_sources/sphincsplus_ref/fips202.c"
       ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
-        "../include",
-        "../dilithium/ref",
-        "../sphincsplus/ref",
-        "../falcon"
+        "src/c_sources/include",
+        "src/c_sources/dilithium_ref",
+        "src/c_sources/sphincsplus_ref"
       ],
       "dependencies": [
         "<!(node -p \"require('node-addon-api').gyp\")"
@@ -67,7 +52,6 @@
         "DILITHIUM_MODE=2",
         "CRYPTO_ALGNAME=\"SPHINCS+-shake-128s\"",
         "PARAMS=sphincs-shake-128s",
-        "FALCON_LOGN_512=9",
         "CUSTOM_RANDOMBYTES=1"
       ],
       "conditions": [
@@ -88,9 +72,6 @@
               "-Wno-implicit-function-declaration"
             ]
           },
-          "defines": [
-            "FALCON_FPEMU=1"
-          ]
         }]
       ]
     }
