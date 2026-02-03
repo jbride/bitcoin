@@ -24,8 +24,7 @@ include_directories(
 
 # Custom randombytes implementation
 set(CUSTOM_RANDOMBYTES
-    dilithium/ref/randombytes_custom.c
-    sphincsplus/ref/randombytes_custom.c
+    src/randombytes_custom.c
 )
 
 # ML-DSA-44 (Dilithium) source files

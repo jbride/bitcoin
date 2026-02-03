@@ -4,12 +4,10 @@
 export enum Algorithm {
   /** BIP-340 Schnorr + X-Only - Elliptic Curve Digital Signature Algorithm */
   SECP256K1_SCHNORR = 0,
-  /** FN-DSA-512 (FALCON) - Fast Fourier lattice-based signature scheme */
-  FN_DSA_512 = 1,
   /** ML-DSA-44 (CRYSTALS-Dilithium) - Lattice-based signature scheme */
-  ML_DSA_44 = 2,
+  ML_DSA_44 = 1,
   /** SLH-DSA-Shake-128s (SPHINCS+) - Hash-based signature scheme */
-  SLH_DSA_SHAKE_128S = 3,
+  SLH_DSA_SHAKE_128S = 2,
 }
 
 /**

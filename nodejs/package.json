@@ -1,11 +1,12 @@
 {
-  "name": "bitcoinpqc",
-  "version": "0.1.0",
+  "name": "@jbride/bitcoinpqc",
+  "version": "0.2.9",
   "description": "NodeJS TypeScript bindings for Bitcoin PQC library",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc && node-gyp rebuild",
+    "sync-c-sources": "./scripts/sync-c-sources.sh",
+    "build": "npm run sync-c-sources && tsc -p . && node-gyp rebuild",
     "install": "node-gyp rebuild",
     "test": "jest",
     "prepare": "npm run build",
@@ -18,11 +19,19 @@
     "cryptography",
     "signature",
     "dilithium",
-    "falcon",
     "sphincs+"
   ],
-  "author": "",
+  "author": "Hunter Beast <hunter@surmount.systems>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bitcoin/libbitcoinpqc.git",
+    "directory": "nodejs"
+  },
+  "bugs": {
+    "url": "https://github.com/bitcoin/libbitcoinpqc/issues"
+  },
+  "homepage": "https://github.com/bitcoin/libbitcoinpqc#readme",
   "type": "commonjs",
   "devDependencies": {
     "@types/jest": "^29.5.12",
@@ -40,7 +49,12 @@
     "dist",
     "README.md",
     "binding.gyp",
-    "src/native"
+    "tsconfig.json",
+    "src/native",
+    "src/c_sources"
   ],
-  "gypfile": true
+  "gypfile": true,
+  "publishConfig": {
+    "access": "public"
+  }
 }

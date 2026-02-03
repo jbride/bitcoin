@@ -21,3 +21,5 @@ coverage/
 .vscode/
 *.swp
 *.swo
+
+c_sources

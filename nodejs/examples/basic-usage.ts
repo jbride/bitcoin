@@ -10,34 +10,30 @@ import {
 import crypto from "crypto";
 
 /**
- * This example demonstrates basic usage of the bitcoinpqc TypeScript bindings.
+ * This example demonstrates basic usage of the bitcoinpqc TypeScript bindings
+ * with SLH-DSA-SHAKE-128S (SPHINCS+).
  *
  * It shows:
- * 1. Getting key and signature sizes
+ * 1. Getting key and signature sizes for SLH-DSA
  * 2. Key generation
  * 3. Signing messages
  * 4. Verifying signatures
  * 5. Error handling
  */
 
-// Print key sizes for all algorithms
-console.log("===== Key and Signature Sizes =====");
-for (const algo of [
-  Algorithm.ML_DSA_44,
-  Algorithm.SLH_DSA_SHAKE_128S,
-  Algorithm.FN_DSA_512,
-]) {
-  const algoName = Algorithm[algo];
-  console.log(`${algoName}:`);
-  console.log(`  Public key size: ${publicKeySize(algo)} bytes`);
-  console.log(`  Secret key size: ${secretKeySize(algo)} bytes`);
-  console.log(`  Signature size: ${signatureSize(algo)} bytes`);
-  console.log();
-}
+// Print key sizes for SLH-DSA algorithm
+console.log("===== SLH-DSA Key and Signature Sizes =====");
+const algo = Algorithm.SLH_DSA_SHAKE_128S;
+const algoName = Algorithm[algo];
+console.log(`${algoName}:`);
+console.log(`  Public key size: ${publicKeySize(algo)} bytes`);
+console.log(`  Secret key size: ${secretKeySize(algo)} bytes`);
+console.log(`  Signature size: ${signatureSize(algo)} bytes`);
+console.log();
 
-// Generate a keypair
-function generateKeysAndSign(algorithm: Algorithm, message: string): void {
-  console.log(`===== Working with ${Algorithm[algorithm]} =====`);
+// Generate a keypair and demonstrate SLH-DSA functionality
+function demonstrateSlhDsa(): void {
+  console.log(`===== Working with ${Algorithm[Algorithm.SLH_DSA_SHAKE_128S]} =====`);
 
   // Generate random data for key generation
   console.log("Generating random data...");
@@ -45,13 +41,14 @@ function generateKeysAndSign(algorithm: Algorithm, message: string): void {
 
   try {
     // Generate a keypair
-    console.log("Generating keypair...");
-    const keypair = generateKeyPair(algorithm, randomData);
+    console.log("Generating SLH-DSA keypair...");
+    const keypair = generateKeyPair(Algorithm.SLH_DSA_SHAKE_128S, randomData);
     console.log(
       `Generated keypair with public key size ${keypair.publicKey.bytes.length} bytes`
     );
 
     // Create a message to sign
+    const message = "Hello from SLH-DSA-SHAKE-128S (SPHINCS+)!";
     const messageBytes = Buffer.from(message, "utf-8");
     console.log(`Message to sign: "${message}"`);
 
@@ -69,7 +66,7 @@ function generateKeysAndSign(algorithm: Algorithm, message: string): void {
       console.error("❌ Signature verification failed:", error);
     }
 
-    // Try verifying with a different message (should fail with real implementation)
+    // Try verifying with a different message (should fail)
     const badMessage = Buffer.from(message + " (modified)", "utf-8");
     console.log(
       `\nAttempting to verify with modified message: "${message} (modified)"`
@@ -83,7 +80,7 @@ function generateKeysAndSign(algorithm: Algorithm, message: string): void {
     }
   } catch (error) {
     console.error(
-      `❌ Error while working with ${Algorithm[algorithm]}:`,
+      `❌ Error while working with ${Algorithm[Algorithm.SLH_DSA_SHAKE_128S]}:`,
       error
     );
   }
@@ -91,10 +88,5 @@ function generateKeysAndSign(algorithm: Algorithm, message: string): void {
   console.log("\n");
 }
 
-// Run examples with working algorithms
-generateKeysAndSign(Algorithm.FN_DSA_512, "Hello from FN-DSA-512 (Falcon)!");
-generateKeysAndSign(Algorithm.ML_DSA_44, "Hello from ML-DSA-44 (Dilithium)!");
-generateKeysAndSign(
-  Algorithm.SLH_DSA_SHAKE_128S,
-  "Hello from SLH-DSA-SHAKE-128S (SPHINCS+)!"
-);
+// Run the SLH-DSA demonstration
+demonstrateSlhDsa();
