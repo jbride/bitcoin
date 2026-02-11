@@ -52,8 +52,8 @@ static constexpr unsigned int MAX_STANDARD_P2WSH_STACK_ITEMS{100};
 static constexpr unsigned int MAX_STANDARD_P2WSH_STACK_ITEM_SIZE{80};
 /** The maximum size in bytes of each witness stack item in a standard BIP 342 script (Taproot, leaf version 0xc0) */
 static constexpr unsigned int MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE{80};
-/** The maximum size in bytes of each witness stack item in a standard P2TSH script */
-static constexpr unsigned int MAX_STANDARD_P2TSH_STACK_ITEM_SIZE{8000};
+/** The maximum size in bytes of each witness stack item in a standard P2MR script */
+static constexpr unsigned int MAX_STANDARD_P2MR_STACK_ITEM_SIZE{8000};
 /** The maximum size in bytes of a standard witnessScript */
 static constexpr unsigned int MAX_STANDARD_P2WSH_SCRIPT_SIZE{3600};
 /** The maximum size of a standard ScriptSig */
@@ -107,7 +107,7 @@ static constexpr unsigned int MANDATORY_SCRIPT_VERIFY_FLAGS{SCRIPT_VERIFY_P2SH |
                                                              SCRIPT_VERIFY_CHECKSEQUENCEVERIFY |
                                                              SCRIPT_VERIFY_WITNESS |
                                                              SCRIPT_VERIFY_TAPROOT |
-                                                             SCRIPT_VERIFY_P2TSH};
+                                                             SCRIPT_VERIFY_P2MR};
 
 /**
  * Standard script verification flags that standard transactions will comply
@@ -129,7 +129,7 @@ static constexpr unsigned int STANDARD_SCRIPT_VERIFY_FLAGS{MANDATORY_SCRIPT_VERI
                                                              SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_TAPROOT_VERSION |
                                                              SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS |
                                                              SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE |
-                                                             SCRIPT_VERIFY_P2TSH};
+                                                             SCRIPT_VERIFY_P2MR};
 
 /** For convenience, standard but not mandatory verify flags. */
 static constexpr unsigned int STANDARD_NOT_MANDATORY_VERIFY_FLAGS{STANDARD_SCRIPT_VERIFY_FLAGS & ~MANDATORY_SCRIPT_VERIFY_FLAGS};

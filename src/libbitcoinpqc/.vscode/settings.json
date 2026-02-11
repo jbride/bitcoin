@@ -1,6 +1,3 @@
 {
-  "rust-analyzer.cargo.features": ["ide"],
-  "editor.formatOnSave": true,
-  "rust-analyzer.check.command": "clippy",
-  "rust-analyzer.check.extraArgs": ["--all-targets"]
+  "editor.formatOnSave": true
 }

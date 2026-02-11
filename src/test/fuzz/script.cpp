@@ -158,8 +158,8 @@ FUZZ_TARGET(script, .init = initialize_script)
             // Only try to round trip non-pubkey destinations since PubKeyDestination has no encoding
             Assert(dest.empty() != valid);
             
-            // TODO: Temporary workaround: Skip round-trip test for P2TSH during transition
-            if (!std::get_if<WitnessV2P2TSH>(&tx_destination_1)) {
+            // TODO: Temporary workaround: Skip round-trip test for P2MR during transition
+            if (!std::get_if<WitnessV2P2MR>(&tx_destination_1)) {
                 // Add debugging to see what type of destination is failing
                 if (std::get_if<WitnessUnknown>(&tx_destination_1)) {
                     // Skip WitnessUnknown as well during transition
@@ -170,7 +170,7 @@ FUZZ_TARGET(script, .init = initialize_script)
             }
             
             // TODO: Temporary workaround: Skip validity check for problematic destination types
-            if (!std::get_if<WitnessV2P2TSH>(&tx_destination_1) && 
+            if (!std::get_if<WitnessV2P2MR>(&tx_destination_1) && 
                 !std::get_if<WitnessUnknown>(&tx_destination_1)) {
                 Assert(valid == IsValidDestinationString(encoded_dest));
             }
