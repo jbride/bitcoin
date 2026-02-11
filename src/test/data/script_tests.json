@@ -2668,7 +2668,7 @@
     "TAPSCRIPT Test that DROP operations do not execute inside of a false IF conditional"
 ],
 
-["P2TSH tests"],
+["P2MR tests"],
 [
     [
         "aa",
@@ -2681,7 +2681,7 @@
     "0x52 0x20 0x7e04991706edb31549f786fa7113bb857ceb26174f7d08e9efa91decf13324a0",
     "P2SH,WITNESS,TAPROOT",
     "OK",
-    "P2TSH: Simple negative OP_EQUAL test pre-activation"
+    "P2MR: Simple negative OP_EQUAL test pre-activation"
 ],
 [
     [
@@ -2693,9 +2693,9 @@
     ],
     "",
     "0x52 0x20 0x7e04991706edb31549f786fa7113bb857ceb26174f7d08e9efa91decf13324a0",
-    "P2SH,WITNESS,TAPROOT,P2TSH",
+    "P2SH,WITNESS,TAPROOT,P2MR",
     "EVAL_FALSE",
-    "P2TSH: Simple negative OP_EQUAL test post-activation"
+    "P2MR: Simple negative OP_EQUAL test post-activation"
 ],
 [
     [
@@ -2707,9 +2707,9 @@
     ],
     "",
     "0x52 0x20 0x7e04991706edb31549f786fa7113bb857ceb26174f7d08e9efa91decf13324a0",
-    "P2SH,WITNESS,TAPROOT,P2TSH",
+    "P2SH,WITNESS,TAPROOT,P2MR",
     "OK",
-    "P2TSH: Simple positive OP_EQUAL test post-activation"
+    "P2MR: Simple positive OP_EQUAL test post-activation"
 ],
 [
     [
@@ -2718,9 +2718,9 @@
     ],
     "",
     "0x52 0x20 0x7e04991706edb31549f786fa7113bb857ceb26174f7d08e9efa91decf13324a0",
-    "P2SH,WITNESS,TAPROOT,P2TSH",
+    "P2SH,WITNESS,TAPROOT,P2MR",
     "WITNESS_PROGRAM_MISMATCH",
-    "P2TSH: Key path spending not supported"
+    "P2MR: Key path spending not supported"
 ],
 [
     [
@@ -2730,9 +2730,9 @@
     ],
     "",
     "0x52 0x20 0x7e04991706edb31549f786fa7113bb857ceb26174f7d08e9efa91decf13324a0",
-    "P2SH,WITNESS,TAPROOT,P2TSH",
+    "P2SH,WITNESS,TAPROOT,P2MR",
     "WITNESS_PROGRAM_MISMATCH",
-    "P2TSH: Witness program mismatch"
+    "P2MR: Witness program mismatch"
 ],
 [
     [
@@ -2744,9 +2744,9 @@
     ],
     "",
     "0x52 0x20 0x7e04991706edb31549f786fa7113bb857ceb26174f7d08e9efa91decf13324a0",
-    "P2SH,WITNESS,TAPROOT,P2TSH",
-    "P2TSH_WRONG_PARITY_BIT",
-    "P2TSH: Wrong parity bit"
+    "P2SH,WITNESS,TAPROOT,P2MR",
+    "P2MR_WRONG_PARITY_BIT",
+    "P2MR: Wrong parity bit"
 ],
 
 ["NULLFAIL should cover all signatures and signatures only"],

@@ -1421,7 +1421,7 @@ void PrecomputedTransactionData::Init(const T& txTo, std::vector<CTxOut>&& spent
     for (size_t inpos = 0; inpos < txTo.vin.size() && !(uses_bip143_segwit && uses_bip341_taproot); ++inpos) {
         if (!txTo.vin[inpos].scriptWitness.IsNull()) {
 
-            // Allow for P2TR and P2TSH
+            // Allow for P2TR and P2MR
             if (m_spent_outputs_ready && m_spent_outputs[inpos].scriptPubKey.size() == 2 + WITNESS_V1_TAPROOT_SIZE &&
                 ( m_spent_outputs[inpos].scriptPubKey[0] == OP_1 || m_spent_outputs[inpos].scriptPubKey[0] == OP_2)) {
                 // Treat every witness-bearing spend with 34-byte scriptPubKey that starts with OP_1 as a Taproot
@@ -1944,10 +1944,10 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
         sig_size = 7856;  // Strip the hash type byte
         LogPrintf("SLH-DSA DEBUG: Stripping hash type byte from signature (7857 -> 7856 bytes)\n");
     } else if (exec_script.size() == 70) {
-        // For P2TSH combined Schnorr+SLH-DSA scripts (70 bytes), use SIGHASH_ALL
+        // For P2MR combined Schnorr+SLH-DSA scripts (70 bytes), use SIGHASH_ALL
         // This matches the behavior of the Rust implementation
         hashtype = SIGHASH_ALL;
-        LogPrintf("SLH-DSA DEBUG: P2TSH combined script detected, using SIGHASH_ALL (0x%02x)\n", hashtype);
+        LogPrintf("SLH-DSA DEBUG: P2MR combined script detected, using SIGHASH_ALL (0x%02x)\n", hashtype);
     }
     
     // Create message hash for SLH-DSA verification using the extracted hash type
@@ -2240,14 +2240,14 @@ uint256 ComputeTaprootMerkleRoot(std::span<const unsigned char> control, const u
 
 uint256 ComputeTshMerkleRoot(std::span<const unsigned char> control, const uint256& tapleaf_hash)
 {
-    assert(control.size() >= P2TSH_CONTROL_BASE_SIZE);
-    assert(control.size() <= P2TSH_CONTROL_MAX_SIZE);
-    assert((control.size() - P2TSH_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE == 0);
+    assert(control.size() >= P2MR_CONTROL_BASE_SIZE);
+    assert(control.size() <= P2MR_CONTROL_MAX_SIZE);
+    assert((control.size() - P2MR_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE == 0);
 
-    const int path_len = (control.size() - P2TSH_CONTROL_BASE_SIZE) / TAPROOT_CONTROL_NODE_SIZE;
+    const int path_len = (control.size() - P2MR_CONTROL_BASE_SIZE) / TAPROOT_CONTROL_NODE_SIZE;
     uint256 k = tapleaf_hash;
     for (int i = 0; i < path_len; ++i) {
-        std::span node{std::span{control}.subspan(P2TSH_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * i, TAPROOT_CONTROL_NODE_SIZE)};
+        std::span node{std::span{control}.subspan(P2MR_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * i, TAPROOT_CONTROL_NODE_SIZE)};
         k = ComputeTapbranchHash(k, node);
     }
     return k;
@@ -2271,7 +2271,7 @@ static bool VerifyScriptInTshMerkleRootPath(
     const std::vector<unsigned char>& control, 
     const std::vector<unsigned char>& merkle_root, const CScript& script)
 {
-    assert(control.size() >= P2TSH_CONTROL_BASE_SIZE);
+    assert(control.size() >= P2MR_CONTROL_BASE_SIZE);
     assert(merkle_root.size() >= uint256::size());
 
     // Compute the tapleaf hash from the script
@@ -2358,9 +2358,9 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
             }
             return set_success(serror);
         }
-    } else if (witversion == 2 && program.size() == WITNESS_V2_P2TSH_SIZE ) {
-        // P2TSH: 32-byte witness v2 program (script path only)
-        // Only apply P2TSH validation for native witness outputs, not P2SH-wrapped ones
+    } else if (witversion == 2 && program.size() == WITNESS_V2_P2MR_SIZE ) {
+        // P2MR: 32-byte witness v2 program (script path only)
+        // Only apply P2MR validation for native witness outputs, not P2SH-wrapped ones
         if (is_p2sh) {
             // For P2SH-wrapped witness v2, treat as WITNESS_UNKNOWN to maintain compatibility
             if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM) {
@@ -2369,9 +2369,9 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
             return true;
         }
         
-        // Only apply P2TSH validation if the flag is explicitly set
-        if (!(flags & SCRIPT_VERIFY_P2TSH)) {
-            // If P2TSH flag is not set, treat as WITNESS_UNKNOWN
+        // Only apply P2MR validation if the flag is explicitly set
+        if (!(flags & SCRIPT_VERIFY_P2MR)) {
+            // If P2MR flag is not set, treat as WITNESS_UNKNOWN
             if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM) {
                 return set_error(serror, SCRIPT_ERR_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM);
             }
@@ -2388,7 +2388,7 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
             execdata.m_annex_present = false;
         }
         execdata.m_annex_init = true;
-        // P2TSH only supports script path spending, not key path spending
+        // P2MR only supports script path spending, not key path spending
         if (stack.size() == 1) {
             return set_error(serror, SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
         } else {
@@ -2398,20 +2398,20 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
             const valtype& script = SpanPopBack(stack);
 
             const size_t control_size = control.size();
-            if (control_size < P2TSH_CONTROL_BASE_SIZE || control_size > P2TSH_CONTROL_MAX_SIZE || ((control_size - P2TSH_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE) != 0) {
-                return set_error(serror, SCRIPT_ERR_P2TSH_WRONG_CONTROL_SIZE);
+            if (control_size < P2MR_CONTROL_BASE_SIZE || control_size > P2MR_CONTROL_MAX_SIZE || ((control_size - P2MR_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE) != 0) {
+                return set_error(serror, SCRIPT_ERR_P2MR_WRONG_CONTROL_SIZE);
             }
             execdata.m_tapleaf_hash = ComputeTapleafHash(control[0] & TAPROOT_LEAF_MASK, script);
             if (!VerifyScriptInTshMerkleRootPath(control, program, CScript(script.begin(), script.end()))) {
                 return set_error(serror, SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
             }
             execdata.m_tapleaf_hash_init = true;
-            // Check for P2TSH-specific parity requirement (must be 0xc1 for Tapscript)
+            // Check for P2MR-specific parity requirement (must be 0xc1 for Tapscript)
             if ((control[0] & TAPROOT_LEAF_MASK) == TAPROOT_LEAF_TAPSCRIPT &&
-                control[0] != P2TSH_LEAF_TAPSCRIPT) {
-                return set_error(serror, SCRIPT_ERR_P2TSH_WRONG_PARITY_BIT);
+                control[0] != P2MR_LEAF_TAPSCRIPT) {
+                return set_error(serror, SCRIPT_ERR_P2MR_WRONG_PARITY_BIT);
             }
-            if (control[0] == P2TSH_LEAF_TAPSCRIPT) {
+            if (control[0] == P2MR_LEAF_TAPSCRIPT) {
                 // Tapscript (leaf version 0xc1 since parity is always 1)
                 exec_script = CScript(script.begin(), script.end());
                 execdata.m_validation_weight_left = ::GetSerializeSize(witness.stack) + VALIDATION_WEIGHT_OFFSET;
