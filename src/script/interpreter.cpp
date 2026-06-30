@@ -2411,6 +2411,9 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
                 control[0] != P2MR_LEAF_TAPSCRIPT) {
                 return set_error(serror, SCRIPT_ERR_P2MR_WRONG_PARITY_BIT);
             }
+            if (control_size == P2MR_CONTROL_BASE_SIZE) {
+                return set_success(serror);
+            }
             if (control[0] == P2MR_LEAF_TAPSCRIPT) {
                 // Tapscript (leaf version 0xc1 since parity is always 1)
                 exec_script = CScript(script.begin(), script.end());
