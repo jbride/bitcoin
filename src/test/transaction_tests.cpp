@@ -1055,6 +1055,35 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     CheckIsNotStandard(t, "dust");
 }
 
+BOOST_AUTO_TEST_CASE(p2mr_witness_standard_stack_item_size)
+{
+    CCoinsView coins_dummy;
+    CCoinsViewCache coins(&coins_dummy);
+
+    CMutableTransaction funding;
+    funding.vin.resize(1);
+    funding.vin[0].prevout.SetNull();
+    funding.vout.emplace_back(
+        CENT,
+        CScript{} << OP_2 << std::vector<unsigned char>(WITNESS_V2_P2MR_SIZE, 1));
+    AddCoins(coins, CTransaction{funding}, 0, false);
+
+    const auto make_spend = [&](const size_t item_size) {
+        CMutableTransaction spend;
+        spend.vin.emplace_back(COutPoint{funding.GetHash(), 0});
+        spend.vout.emplace_back(CENT - 1, CScript{} << OP_TRUE);
+        spend.vin[0].scriptWitness.stack = {
+            std::vector<unsigned char>(item_size, 1),
+            std::vector<unsigned char>{OP_TRUE},
+            std::vector<unsigned char>{P2MR_LEAF_TAPSCRIPT},
+        };
+        return CTransaction{spend};
+    };
+
+    BOOST_CHECK(IsWitnessStandard(make_spend(MAX_STANDARD_P2MR_STACK_ITEM_SIZE), coins));
+    BOOST_CHECK(!IsWitnessStandard(make_spend(MAX_STANDARD_P2MR_STACK_ITEM_SIZE + 1), coins));
+}
+
 BOOST_AUTO_TEST_CASE(max_standard_legacy_sigops)
 {
     CCoinsView coins_dummy;

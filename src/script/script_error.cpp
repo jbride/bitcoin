@@ -124,7 +124,7 @@ std::string ScriptErrorString(const ScriptError serror)
         case SCRIPT_ERR_P2MR_WRONG_CONTROL_SIZE:
             return "Invalid P2MR control block size";
         case SCRIPT_ERR_P2MR_WRONG_PARITY_BIT:
-            return "P2MR leaf must use parity bit 1 (0xc1)";
+            return "P2MR control byte must use parity bit 1";
         case SCRIPT_ERR_UNKNOWN_ERROR:
         case SCRIPT_ERR_ERROR_COUNT:
         default: break;

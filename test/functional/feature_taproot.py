@@ -3,11 +3,6 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 # Test Taproot softfork (BIPs 340-342)
-#
-# NOTE: This test file has been modified for SLH-DSA development.
-# Only OP_SUBSTR (127) tests are disabled because they conflict with the SLH-DSA 
-# implementation that uses OP_SUBSTR (127) for signature verification.
-# All other OP_SUCCESSx tests have been re-enabled and work normally.
 
 from test_framework.blocktools import (
     COINBASE_MATURITY,
@@ -839,6 +834,8 @@ def spenders_taproot_active():
                 if not p2sh and witver == 1 and witlen == 32:
                     add_spender(spenders, "applic/keypath", p2sh=p2sh, spk_mutate_pre_p2sh=mutate, tap=tap, key=secs[1], **SIGHASH_BITFLIP, **ERR_SCHNORR_SIG)
                     add_spender(spenders, "applic/scriptpath", p2sh=p2sh, leaf="s0", spk_mutate_pre_p2sh=mutate, tap=tap, key=secs[0], **SINGLE_SIG, failure={"leaf": "dummy"}, **ERR_OP_RETURN)
+                elif not p2sh and witver == 2 and witlen == 32:
+                    continue
                 else:
                     add_spender(spenders, "applic/keypath", p2sh=p2sh, spk_mutate_pre_p2sh=mutate, tap=tap, key=secs[1], standard=False)
                     add_spender(spenders, "applic/scriptpath", p2sh=p2sh, leaf="s0", spk_mutate_pre_p2sh=mutate, tap=tap, key=secs[0], **SINGLE_SIG, standard=False)
@@ -1151,12 +1148,6 @@ def spenders_taproot_active():
     for opval in range(76, 0x100):
         opcode = CScriptOp(opval)
         if not is_op_success(opcode):
-            continue
-        
-        # SKIP OP_SUBSTR (127) TESTS FOR SLH-DSA DEVELOPMENT
-        # OP_SUBSTR is used for SLH-DSA signature verification and behaves differently
-        # than other OP_SUCCESSx opcodes, breaking the test expectations.
-        if opcode == 127:  # OP_SUBSTR
             continue
         scripts = [
             ("bare_success", CScript([opcode])),

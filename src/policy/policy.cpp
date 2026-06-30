@@ -340,12 +340,12 @@ bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
             }
         }
 
-        // Check policy limits for P2MR spends:
+        // Check policy limits for native P2MR spends:
         // - MAX_STANDARD_P2MR_STACK_ITEM_SIZE limit for stack item size
         // - Script path only (no key path spending)
         // - No annexes
-        if (witnessversion == 2 && witnessprogram.size() == WITNESS_V2_P2MR_SIZE) {
-            // P2MR spend (non-P2SH-wrapped, version 3, witness program size 32)
+        if (witnessversion == 2 && witnessprogram.size() == WITNESS_V2_P2MR_SIZE && !p2sh) {
+            // P2MR spend (native witness v2, witness program size 32)
             std::span stack{tx.vin[i].scriptWitness.stack};
             if (stack.size() >= 2 && !stack.back().empty() && stack.back()[0] == ANNEX_TAG) {
                 // Annexes are nonstandard as long as no semantics are defined for them.
@@ -359,13 +359,7 @@ bool IsWitnessStandard(const CTransaction& tx, const CCoinsViewCache& mapInputs)
                 if ((control_block[0] & TAPROOT_LEAF_MASK) == TAPROOT_LEAF_TAPSCRIPT) {
                     // Leaf version 0xc0 (aka Tapscript, see BIP 342)
                     for (const auto& item : stack) {
-                        // Allow larger items for SLH-DSA signatures (OP_SUCCESS127)
-                        if (item.size() > MAX_STANDARD_P2MR_STACK_ITEM_SIZE) {
-                            // Check if this is an SLH-DSA signature by looking at the script
-                            // You'd need to parse the script to see if it contains OP_SUCCESS127
-                            // For now, we could allow larger items when OP_SUCCESS127 is present
-                            return false; // Keep existing behavior until SLH-DSA is implemented
-                        }
+                        if (item.size() > MAX_STANDARD_P2MR_STACK_ITEM_SIZE) return false;
                     }
                 }
             } else {

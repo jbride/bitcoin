@@ -240,7 +240,7 @@ static constexpr size_t TAPROOT_CONTROL_NODE_SIZE = 32;
 static constexpr size_t TAPROOT_CONTROL_MAX_NODE_COUNT = 128;
 static constexpr size_t TAPROOT_CONTROL_MAX_SIZE = TAPROOT_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * TAPROOT_CONTROL_MAX_NODE_COUNT;
 static constexpr size_t P2MR_CONTROL_BASE_SIZE = 1;  // no tweaked pubkey
-static constexpr size_t P2MR_CONTROL_MAX_SIZE = TAPROOT_CONTROL_MAX_SIZE + TAPROOT_CONTROL_NODE_SIZE * TAPROOT_CONTROL_MAX_NODE_COUNT;
+static constexpr size_t P2MR_CONTROL_MAX_SIZE = P2MR_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * TAPROOT_CONTROL_MAX_NODE_COUNT;
 
 extern const HashWriter HASHER_TAPSIGHASH; //!< Hasher with tag "TapSighash" pre-fed to it.
 extern const HashWriter HASHER_TAPLEAF;    //!< Hasher with tag "TapLeaf" pre-fed to it.
@@ -296,10 +296,6 @@ private:
     unsigned int nIn;
     const CAmount amount;
     const PrecomputedTransactionData* txdata;
-    
-    // Friend function for SLH-DSA signature verification
-    template<typename U>
-    friend bool HandleSLHDSASignature(std::vector<std::vector<unsigned char>>& stack, const CScript& exec_script, unsigned int flags, const GenericTransactionSignatureChecker<U>& checker, ScriptExecutionData& execdata, ScriptError* serror);
 
 protected:
     virtual bool VerifyECDSASignature(const std::vector<unsigned char>& vchSig, const CPubKey& vchPubKey, const uint256& sighash) const;

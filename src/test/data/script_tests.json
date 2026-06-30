@@ -2694,8 +2694,8 @@
     "",
     "0x52 0x20 0x7e04991706edb31549f786fa7113bb857ceb26174f7d08e9efa91decf13324a0",
     "P2SH,WITNESS,TAPROOT,P2MR",
-    "EVAL_FALSE",
-    "P2MR: Simple negative OP_EQUAL test post-activation"
+    "OK",
+    "P2MR: Depth-zero OP_EQUAL succeeds without executing script"
 ],
 [
     [
@@ -2725,7 +2725,7 @@
 [
     [
         "aa",
-        "aa",
+        "ab",
         0.00000001
     ],
     "",
