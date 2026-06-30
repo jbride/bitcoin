@@ -5,6 +5,7 @@
 #include <test/data/key_io_invalid.json.h>
 #include <test/data/key_io_valid.json.h>
 
+#include <addresstype.h>
 #include <key.h>
 #include <key_io.h>
 #include <script/script.h>
@@ -17,8 +18,25 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <variant>
 
 BOOST_FIXTURE_TEST_SUITE(key_io_tests, BasicTestingSetup)
+
+BOOST_AUTO_TEST_CASE(key_io_p2mr_roundtrip)
+{
+    SelectParams(ChainType::MAIN);
+
+    uint256 root;
+    std::fill(root.begin(), root.end(), uint8_t{0x11});
+    const WitnessV2P2MR p2mr{root};
+    const std::string address{EncodeDestination(p2mr)};
+    BOOST_CHECK_EQUAL(address.substr(0, 4), "bc1z");
+
+    const CTxDestination decoded{DecodeDestination(address)};
+    BOOST_REQUIRE(IsValidDestination(decoded));
+    BOOST_CHECK(std::get<WitnessV2P2MR>(decoded) == p2mr);
+    BOOST_CHECK_EQUAL(HexStr(GetScriptForDestination(decoded)).substr(0, 4), "5220");
+}
 
 // Goal: check that parsed keys match test payload
 BOOST_AUTO_TEST_CASE(key_io_valid_parse)
