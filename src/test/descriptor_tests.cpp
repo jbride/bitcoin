@@ -2,9 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <addresstype.h>
+#include <key_io.h>
 #include <pubkey.h>
 #include <script/descriptor.h>
 #include <script/sign.h>
+#include <script/solver.h>
 #include <test/util/setup_common.h>
 #include <util/check.h>
 #include <util/strencodings.h>
@@ -15,6 +18,7 @@
 #include <optional>
 #include <regex>
 #include <string>
+#include <variant>
 #include <vector>
 
 using namespace util::hex_literals;
@@ -580,6 +584,22 @@ BOOST_AUTO_TEST_CASE(descriptor_test)
     Check("wpkh(L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1)", "wpkh(03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd)", "wpkh(03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd)", SIGNABLE, {{"00149a1c78a507689f6f54b847ad1cef1e614ee23f1e"}}, OutputType::BECH32, /*op_desc_id=*/uint256{"4a47b7f497721bf3fc48c69a5d22bc1f3617238649a8ba7cb96fbd92fec84a7e"});
     Check("sh(wpkh(L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1))", "sh(wpkh(03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd))", "sh(wpkh(03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd))", SIGNABLE, {{"a91484ab21b1b2fd065d4504ff693d832434b6108d7b87"}}, OutputType::P2SH_SEGWIT, /*op_desc_id=*/uint256{"a13112753066b5c59473a87c5771b1694a10531944a60e0ab2d7ad66ecb65bcd"});
     Check("tr(L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1)", "tr(a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd)", "tr(a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd)", SIGNABLE | XONLY_KEYS, {{"512077aab6e066f8a7419c5ab714c12c67d25007ed55a43cadcacb4d7a970a093f11"}}, OutputType::BECH32M, /*op_desc_id=*/uint256{"4290f3d017b270be53b91abc56d9d2f23a3ff361d5b1d39550ba011e6cae0da5"});
+    {
+        FlatSigningProvider provider, out;
+        std::string error;
+        auto descs{Parse("tmr(pk(03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd))", provider, error)};
+        BOOST_REQUIRE_MESSAGE(descs.size() == 1, error);
+        std::vector<CScript> scripts;
+        BOOST_REQUIRE(descs[0]->Expand(0, provider, scripts, out));
+        BOOST_REQUIRE_EQUAL(scripts.size(), 1U);
+        BOOST_CHECK_EQUAL(HexStr(scripts[0]).substr(0, 4), "5220");
+        std::vector<std::vector<unsigned char>> solutions;
+        BOOST_CHECK(Solver(scripts[0], solutions) == TxoutType::WITNESS_V2_P2MR);
+        CTxDestination destination;
+        BOOST_REQUIRE(ExtractDestination(scripts[0], destination));
+        BOOST_CHECK(std::get_if<WitnessV2P2MR>(&destination));
+        BOOST_CHECK_EQUAL(EncodeDestination(destination).substr(0, 4), "bc1z");
+    }
     CheckUnparsable("sh(wpkh(L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY2))", "sh(wpkh(03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5))", "wpkh(): Pubkey '03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5' is invalid"); // Invalid pubkey
     CheckUnparsable("pkh(deadbeef/1/2'/3/4']L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1)", "pkh(deadbeef/1/2h/3/4h]03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd)", "pkh(): Key origin start '[ character expected but not found, got 'd' instead"); // Missing start bracket in key origin
     CheckUnparsable("pkh([deadbeef]/1/2'/3/4']L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1)", "pkh([deadbeef]/1/2'/3/4']03a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd)", "pkh(): Multiple ']' characters found for a single pubkey"); // Multiple end brackets in key origin
