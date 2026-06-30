@@ -128,7 +128,7 @@ static void AssetTest(const UniValue& test, SignatureCache& signature_cache)
                 // Check if this is a P2MR script (witness version 2, 32-byte program)
                 bool is_p2mr_script = false;
                 if (prevouts[idx].scriptPubKey.size() >= 2 && 
-                    prevouts[idx].scriptPubKey[0] == 0x53 && // witness version 2
+                    prevouts[idx].scriptPubKey[0] == 0x52 && // witness version 2
                     prevouts[idx].scriptPubKey[1] == 0x20 && // 32-byte program
                     tx.vin[idx].scriptSig.empty()) {  // P2MR should have empty ScriptSig
                     is_p2mr_script = true;
