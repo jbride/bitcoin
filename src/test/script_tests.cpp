@@ -439,6 +439,18 @@ BOOST_AUTO_TEST_CASE(p2mr_control_size)
     DoTest(script_pubkey, CScript{}, witness, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT | SCRIPT_VERIFY_P2MR, "P2MR control block depth above 128", SCRIPT_ERR_P2MR_WRONG_CONTROL_SIZE);
 }
 
+BOOST_AUTO_TEST_CASE(p2mr_future_leaf_parity)
+{
+    CScriptWitness witness;
+    const CScript leaf_script{CScript() << OP_TRUE};
+    witness.stack.emplace_back(leaf_script.begin(), leaf_script.end());
+    witness.stack.push_back({0xc2});
+
+    CScript script_pubkey;
+    script_pubkey << OP_2 << ToByteVector(ComputeTapleafHash(0xc2, witness.stack[0]));
+    DoTest(script_pubkey, CScript{}, witness, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT | SCRIPT_VERIFY_P2MR, "P2MR future leaf version with parity bit zero", SCRIPT_ERR_P2MR_WRONG_PARITY_BIT);
+}
+
 BOOST_AUTO_TEST_CASE(script_build)
 {
     const KeyData keys;
