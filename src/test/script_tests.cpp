@@ -11,6 +11,7 @@
 #include <rpc/util.h>
 #include <script/script.h>
 #include <script/script_error.h>
+#include <script/interpreter.h>
 #include <script/sigcache.h>
 #include <script/sign.h>
 #include <script/signingprovider.h>
@@ -422,6 +423,21 @@ std::string JSONPrettyPrint(const UniValue& univalue)
 } // namespace
 
 BOOST_FIXTURE_TEST_SUITE(script_tests, ScriptTest)
+
+BOOST_AUTO_TEST_CASE(p2mr_control_size)
+{
+    CScriptWitness witness;
+    const CScript leaf_script{CScript() << OP_TRUE};
+    witness.stack.emplace_back(leaf_script.begin(), leaf_script.end());
+
+    std::vector<unsigned char> control(P2MR_CONTROL_BASE_SIZE + TAPROOT_CONTROL_NODE_SIZE * (TAPROOT_CONTROL_MAX_NODE_COUNT + 1), 0);
+    control[0] = P2MR_LEAF_TAPSCRIPT;
+    witness.stack.push_back(control);
+
+    CScript script_pubkey;
+    script_pubkey << OP_2 << std::vector<unsigned char>(WITNESS_V2_P2MR_SIZE, 1);
+    DoTest(script_pubkey, CScript{}, witness, SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_WITNESS | SCRIPT_VERIFY_TAPROOT | SCRIPT_VERIFY_P2MR, "P2MR control block depth above 128", SCRIPT_ERR_P2MR_WRONG_CONTROL_SIZE);
+}
 
 BOOST_AUTO_TEST_CASE(script_build)
 {
