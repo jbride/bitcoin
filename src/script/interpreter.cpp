@@ -2401,16 +2401,14 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
             if (control_size < P2MR_CONTROL_BASE_SIZE || control_size > P2MR_CONTROL_MAX_SIZE || ((control_size - P2MR_CONTROL_BASE_SIZE) % TAPROOT_CONTROL_NODE_SIZE) != 0) {
                 return set_error(serror, SCRIPT_ERR_P2MR_WRONG_CONTROL_SIZE);
             }
+            if ((control[0] & 1) == 0) {
+                return set_error(serror, SCRIPT_ERR_P2MR_WRONG_PARITY_BIT);
+            }
             execdata.m_tapleaf_hash = ComputeTapleafHash(control[0] & TAPROOT_LEAF_MASK, script);
             if (!VerifyScriptInTshMerkleRootPath(control, program, CScript(script.begin(), script.end()))) {
                 return set_error(serror, SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
             }
             execdata.m_tapleaf_hash_init = true;
-            // Check for P2MR-specific parity requirement (must be 0xc1 for Tapscript)
-            if ((control[0] & TAPROOT_LEAF_MASK) == TAPROOT_LEAF_TAPSCRIPT &&
-                control[0] != P2MR_LEAF_TAPSCRIPT) {
-                return set_error(serror, SCRIPT_ERR_P2MR_WRONG_PARITY_BIT);
-            }
             if (control_size == P2MR_CONTROL_BASE_SIZE) {
                 return set_success(serror);
             }
