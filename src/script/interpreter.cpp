@@ -2039,7 +2039,7 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
     
     LogInfo("SLH-DSA DEBUG: ===== END DETAILED DEBUGGING =====\n");
     
-    LogInfo("SLH-DSA DEBUG: Using algorithm BITCOIN_PQC_SLH_DSA_SHAKE_128S\n");
+    LogInfo("SLH-DSA DEBUG: Using algorithm BITCOIN_PQC_SLH_DSA_SHA2_128S\n");
     LogInfo("SLH-DSA DEBUG: Full Pubkey: %s\n", HexStr(pubkey).c_str());
     LogInfo("SLH-DSA DEBUG: Full Message hash (sighash): %s\n", HexStr(message_hash).c_str());
     LogInfo("SLH-DSA DEBUG: Signature (first 16 bytes): %s\n", HexStr(std::span<const uint8_t>(signature.data(), 16)).c_str());
@@ -2056,8 +2056,8 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
     LogInfo("SLH-DSA DEBUG: Message hash size: %zu\n", message_hash.size());
     LogInfo("SLH-DSA DEBUG: Message hash (reversed for display): %s\n", HexStr(message_hash).c_str());
 
-    // Debug the exact bytes being passed to slh_dsa_shake_128s_verify
-    LogInfo("SLH-DSA DEBUG: About to call slh_dsa_shake_128s_verify with:\n");
+    // Debug the exact bytes being passed to slh_dsa_sha2_128s_verify
+    LogInfo("SLH-DSA DEBUG: About to call slh_dsa_sha2_128s_verify with:\n");
     LogInfo("SLH-DSA DEBUG: - Signature: %s...%s\n", 
           HexStr(std::span<const uint8_t>(signature.data(), 16)).c_str(),
           HexStr(std::span<const uint8_t>(signature.data() + signature.size() - 16, 16)).c_str());
@@ -2066,7 +2066,7 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
     LogInfo("SLH-DSA DEBUG: ===== END TRANSACTION CONTEXT =====\n");
     
     // Use the low-level SLH-DSA function directly (matches our 32-byte pubkeys and 7856-byte signatures)
-    int result = slh_dsa_shake_128s_verify(
+    int result = slh_dsa_sha2_128s_verify(
         signature.data(),
         sig_size,
         message_hash.begin(),
@@ -2074,7 +2074,7 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
         pubkey.data()
     );
     
-    LogInfo("SLH-DSA DEBUG: slh_dsa_shake_128s_verify returned: %d\n", result);
+    LogInfo("SLH-DSA DEBUG: slh_dsa_sha2_128s_verify returned: %d\n", result);
     
     if (result != 0) {
         LogInfo("SLH-DSA DEBUG: SLH-DSA signature verification failed with error %d\n", result);
