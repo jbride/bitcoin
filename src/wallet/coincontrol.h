@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2011-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,10 +7,11 @@
 
 #include <outputtype.h>
 #include <policy/feerate.h>
-#include <policy/fees.h>
+#include <policy/fees/block_policy_estimator.h>
 #include <primitives/transaction.h>
 #include <script/keyorigin.h>
 #include <script/signingprovider.h>
+#include <util/fees.h>
 
 #include <algorithm>
 #include <map>
@@ -20,6 +21,8 @@
 namespace wallet {
 const int DEFAULT_MIN_DEPTH = 0;
 const int DEFAULT_MAX_DEPTH = 9999999;
+
+const int DEFAULT_WALLET_TX_VERSION = CTransaction::CURRENT_VERSION;
 
 //! Default for -avoidpartialspends
 static constexpr bool DEFAULT_AVOIDPARTIALSPENDS = false;
@@ -91,7 +94,7 @@ public:
     bool m_allow_other_inputs = true;
     //! Override automatic min/max checks on fee, m_feerate must be set if true
     bool fOverrideFeeRate = false;
-    //! Override the wallet's m_pay_tx_fee if set
+    //! Override the wallet's fee rate if set
     std::optional<CFeeRate> m_feerate;
     //! Override the default confirmation target if set
     std::optional<unsigned int> m_confirm_target;
@@ -109,10 +112,10 @@ public:
     int m_max_depth = DEFAULT_MAX_DEPTH;
     //! SigningProvider that has pubkeys and scripts to do spend size estimation for external inputs
     FlatSigningProvider m_external_provider;
+    //! Version
+    uint32_t m_version = DEFAULT_WALLET_TX_VERSION;
     //! Locktime
     std::optional<uint32_t> m_locktime;
-    //! Version
-    std::optional<uint32_t> m_version;
     //! Caps weight of resulting tx
     std::optional<int> m_max_tx_weight{std::nullopt};
 

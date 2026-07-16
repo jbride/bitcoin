@@ -36,9 +36,8 @@ define fetch_file_inner
 endef
 
 define fetch_file
-    ( test -f $$($(1)_source_dir)/$(4) || \
     ( $(call fetch_file_inner,$(1),$(2),$(3),$(4),$(5)) || \
-      $(call fetch_file_inner,$(1),$(FALLBACK_DOWNLOAD_PATH),$(3),$(4),$(5))))
+      $(call fetch_file_inner,$(1),$(FALLBACK_DOWNLOAD_PATH),$(4),$(4),$(5)))
 endef
 
 # Shell script to create a source tarball in $(1)_source from local directory
@@ -223,7 +222,7 @@ $(1)_cmake=env CC="$$($(1)_cc)" \
                -DCMAKE_AR=`which $$($(1)_ar)` \
                -DCMAKE_NM=`which $$($(1)_nm)` \
                -DCMAKE_RANLIB=`which $$($(1)_ranlib)` \
-               -DCMAKE_INSTALL_LIBDIR=lib/ \
+               -DCMAKE_INSTALL_LIBDIR=lib \
                -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
                -DCMAKE_VERBOSE_MAKEFILE:BOOL=$(V) \
                -DCMAKE_EXPORT_NO_PACKAGE_REGISTRY:BOOL=TRUE \
@@ -247,7 +246,6 @@ endif
 $($(1)_fetched):
 	mkdir -p $$(@D) $(SOURCES_PATH)
 	rm -f $$@
-	touch $$@
 	cd $$(@D); $($(1)_fetch_cmds)
 	cd $($(1)_source_dir); $(foreach source,$($(1)_all_sources),$(build_SHA256SUM) $(source) >> $$(@);)
 	touch $$@

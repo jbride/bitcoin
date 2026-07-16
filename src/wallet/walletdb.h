@@ -7,13 +7,14 @@
 #define BITCOIN_WALLET_WALLETDB_H
 
 #include <key.h>
+#include <primitives/transaction_identifier.h>
 #include <script/sign.h>
-#include <util/transaction_identifier.h>
 #include <wallet/db.h>
 #include <wallet/walletutil.h>
 
 #include <cstdint>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 class CScript;
@@ -26,6 +27,9 @@ class CMasterKey;
 class CWallet;
 class CWalletTx;
 struct WalletContext;
+
+// Logs information about the database, including available engines, features, and other capabilities
+void LogDBInfo();
 
 /**
  * Overview of wallet database classes:
@@ -41,7 +45,6 @@ enum class DBErrors : int
 {
     LOAD_OK = 0,
     NEED_RESCAN = 1,
-    NEED_REWRITE = 2,
     EXTERNAL_SIGNER_SUPPORT_REQUIRED = 3,
     NONCRITICAL_ERROR = 4,
     TOO_NEW = 5,
@@ -123,6 +126,10 @@ public:
     bool operator==(const CHDChain& chain) const
     {
         return seed_id == chain.seed_id;
+    }
+    bool operator<(const CHDChain& chain) const
+    {
+        return seed_id < chain.seed_id;
     }
 };
 
@@ -224,7 +231,7 @@ public:
     bool WriteTx(const CWalletTx& wtx);
     bool EraseTx(Txid hash);
 
-    bool WriteKeyMetadata(const CKeyMetadata& meta, const CPubKey& pubkey, const bool overwrite);
+    bool WriteKeyMetadata(const CKeyMetadata& meta, const CPubKey& pubkey, bool overwrite);
     bool WriteKey(const CPubKey& vchPubKey, const CPrivKey& vchPrivKey, const CKeyMetadata &keyMeta);
     bool WriteCryptedKey(const CPubKey& vchPubKey, const std::vector<unsigned char>& vchCryptedSecret, const CKeyMetadata &keyMeta);
     bool WriteMasterKey(unsigned int nID, const CMasterKey& kMasterKey);
@@ -240,8 +247,6 @@ public:
     bool IsEncrypted();
 
     bool WriteOrderPosNext(int64_t nOrderPosNext);
-
-    bool WriteMinVersion(int nVersion);
 
     bool WriteDescriptorKey(const uint256& desc_id, const CPubKey& pubkey, const CPrivKey& privkey);
     bool WriteCryptedDescriptorKey(const uint256& desc_id, const CPubKey& pubkey, const std::vector<unsigned char>& secret);
@@ -264,10 +269,13 @@ public:
 
     DBErrors LoadWallet(CWallet* pwallet);
 
+    //! Write the given client_version.
+    bool WriteVersion(int client_version) { return m_batch->Write(DBKeys::VERSION, CLIENT_VERSION); }
+
     //! Delete records of the given types
     bool EraseRecords(const std::unordered_set<std::string>& types);
 
-    bool WriteWalletFlags(const uint64_t flags);
+    bool WriteWalletFlags(uint64_t flags);
     //! Begin a new transaction
     bool TxnBegin();
     //! Commit current transaction

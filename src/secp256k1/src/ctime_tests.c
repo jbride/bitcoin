@@ -40,6 +40,11 @@
 #include "../include/secp256k1_ellswift.h"
 #endif
 
+#if defined(__GNUC__)
+# pragma GCC diagnostic push
+# pragma GCC diagnostic warning "-Wunused-function"
+#endif
+
 static void run_tests(secp256k1_context *ctx, unsigned char *key);
 
 int main(void) {
@@ -49,7 +54,7 @@ int main(void) {
 
     if (!SECP256K1_CHECKMEM_RUNNING()) {
         fprintf(stderr, "This test can only usefully be run inside valgrind because it was not compiled under msan.\n");
-        fprintf(stderr, "Usage: libtool --mode=execute valgrind ./ctime_tests\n");
+        fprintf(stderr, "Usage: valgrind ./ctime_tests (or with Autotools: libtool --mode=execute valgrind ./ctime_tests)\n");
         return EXIT_FAILURE;
     }
     ctx = secp256k1_context_create(SECP256K1_CONTEXT_DECLASSIFY);
@@ -265,3 +270,7 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
 
 #endif
 }
+
+#if defined(__GNUC__)
+# pragma GCC diagnostic pop
+#endif

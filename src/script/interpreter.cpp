@@ -8,14 +8,24 @@
 #include <crypto/ripemd160.h>
 #include <crypto/sha1.h>
 #include <crypto/sha256.h>
-#include <cstring>
 #include <logging.h>
+#include <prevector.h>
 #include <pubkey.h>
 #include <script/script.h>
+#include <serialize.h>
+#include <span.h>
+#include <tinyformat.h>
 #include <uint256.h>
 #include <util/strencodings.h>
 #include <libbitcoinpqc/bitcoinpqc.h>
 #include <libbitcoinpqc/slh_dsa.h>
+
+#include <algorithm>
+#include <cassert>
+#include <compare>
+#include <cstring>
+#include <limits>
+#include <stdexcept>
 
 typedef std::vector<unsigned char> valtype;
 
@@ -202,7 +212,7 @@ bool static IsDefinedHashtypeSignature(const valtype &vchSig) {
     return true;
 }
 
-bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError* serror) {
+bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, script_verify_flags flags, ScriptError* serror) {
     // Empty signature. Not strictly DER encoded, but allowed to provide a
     // compact way to provide an invalid signature for use with CHECK(MULTI)SIG
     if (vchSig.size() == 0) {
@@ -219,17 +229,17 @@ bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned i
     return true;
 }
 
-bool static CheckPubKeyEncoding(const valtype &vchPubKey, unsigned int flags, const SigVersion &sigversion, ScriptError* serror) {
-    LogPrintf("SLH-DSA DEBUG: CheckPubKeyEncoding called with pubkey size=%zu, sigversion=%d, flags=0x%x\n", 
-             vchPubKey.size(), (int)sigversion, flags);
-    
+bool static CheckPubKeyEncoding(const valtype &vchPubKey, script_verify_flags flags, const SigVersion &sigversion, ScriptError* serror) {
+    LogInfo("SLH-DSA DEBUG: CheckPubKeyEncoding called with pubkey size=%zu, sigversion=%d, flags=0x%x\n",
+             vchPubKey.size(), (int)sigversion, flags.as_int());
+
     if ((flags & SCRIPT_VERIFY_STRICTENC) != 0 && !IsCompressedOrUncompressedPubKey(vchPubKey)) {
-        LogPrintf("SLH-DSA DEBUG: CheckPubKeyEncoding failed STRICTENC check for %zu-byte pubkey\n", vchPubKey.size());
+        LogInfo("SLH-DSA DEBUG: CheckPubKeyEncoding failed STRICTENC check for %zu-byte pubkey\n", vchPubKey.size());
         return set_error(serror, SCRIPT_ERR_PUBKEYTYPE);
     }
     // Only compressed keys are accepted in segwit
     if ((flags & SCRIPT_VERIFY_WITNESS_PUBKEYTYPE) != 0 && sigversion == SigVersion::WITNESS_V0 && !IsCompressedPubKey(vchPubKey)) {
-        LogPrintf("SLH-DSA DEBUG: CheckPubKeyEncoding failed WITNESS_PUBKEYTYPE check for %zu-byte pubkey\n", vchPubKey.size());
+        LogInfo("SLH-DSA DEBUG: CheckPubKeyEncoding failed WITNESS_PUBKEYTYPE check for %zu-byte pubkey\n", vchPubKey.size());
         return set_error(serror, SCRIPT_ERR_WITNESS_PUBKEYTYPE);
     }
     return true;
@@ -327,7 +337,7 @@ public:
 };
 }
 
-static bool EvalChecksigPreTapscript(const valtype& vchSig, const valtype& vchPubKey, CScript::const_iterator pbegincodehash, CScript::const_iterator pend, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror, bool& fSuccess)
+static bool EvalChecksigPreTapscript(const valtype& vchSig, const valtype& vchPubKey, CScript::const_iterator pbegincodehash, CScript::const_iterator pend, script_verify_flags flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror, bool& fSuccess)
 {
     assert(sigversion == SigVersion::BASE || sigversion == SigVersion::WITNESS_V0);
 
@@ -353,7 +363,7 @@ static bool EvalChecksigPreTapscript(const valtype& vchSig, const valtype& vchPu
     return true;
 }
 
-static bool EvalChecksigTapscript(const valtype& sig, const valtype& pubkey, ScriptExecutionData& execdata, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror, bool& success)
+static bool EvalChecksigTapscript(const valtype& sig, const valtype& pubkey, ScriptExecutionData& execdata, script_verify_flags flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror, bool& success)
 {
     assert(sigversion == SigVersion::TAPSCRIPT);
 
@@ -374,7 +384,7 @@ static bool EvalChecksigTapscript(const valtype& sig, const valtype& pubkey, Scr
         }
     }
     if (pubkey.size() == 0) {
-        return set_error(serror, SCRIPT_ERR_PUBKEYTYPE);
+        return set_error(serror, SCRIPT_ERR_TAPSCRIPT_EMPTY_PUBKEY);
     } else if (pubkey.size() == 32) {
         if (success && !checker.CheckSchnorrSignature(sig, pubkey, sigversion, execdata, serror)) {
             return false; // serror is set
@@ -398,7 +408,7 @@ static bool EvalChecksigTapscript(const valtype& sig, const valtype& pubkey, Scr
  * A return value of false means the script fails entirely. When true is returned, the
  * success variable indicates whether the signature check itself succeeded.
  */
-static bool EvalChecksig(const valtype& sig, const valtype& pubkey, CScript::const_iterator pbegincodehash, CScript::const_iterator pend, ScriptExecutionData& execdata, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror, bool& success)
+static bool EvalChecksig(const valtype& sig, const valtype& pubkey, CScript::const_iterator pbegincodehash, CScript::const_iterator pend, ScriptExecutionData& execdata, script_verify_flags flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror, bool& success)
 {
     switch (sigversion) {
     case SigVersion::BASE:
@@ -413,7 +423,7 @@ static bool EvalChecksig(const valtype& sig, const valtype& pubkey, CScript::con
     assert(false);
 }
 
-bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror)
+bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, script_verify_flags flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror)
 {
     static const CScriptNum bnZero(0);
     static const CScriptNum bnOne(1);
@@ -617,7 +627,7 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     if (fExec)
                     {
                         if (stack.size() < 1)
-                            return set_error(serror, SCRIPT_ERR_UNBALANCED_CONDITIONAL);
+                            return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
                         valtype& vch = stacktop(-1);
                         // Tapscript requires minimal IF/NOTIF inputs as a consensus rule.
                         if (sigversion == SigVersion::TAPSCRIPT) {
@@ -1232,6 +1242,10 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                 return set_error(serror, SCRIPT_ERR_STACK_SIZE);
         }
     }
+    catch (const scriptnum_error&)
+    {
+        return set_error(serror, SCRIPT_ERR_SCRIPTNUM);
+    }
     catch (...)
     {
         return set_error(serror, SCRIPT_ERR_UNKNOWN_ERROR);
@@ -1243,7 +1257,7 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
     return set_success(serror);
 }
 
-bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror)
+bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, script_verify_flags flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror)
 {
     ScriptExecutionData execdata;
     return EvalScript(stack, script, flags, checker, sigversion, execdata, serror);
@@ -1576,10 +1590,56 @@ bool SignatureHashSchnorr(uint256& hash_out, ScriptExecutionData& execdata, cons
     return true;
 }
 
+int SigHashCache::CacheIndex(int32_t hash_type) const noexcept
+{
+    // Note that we do not distinguish between BASE and WITNESS_V0 to determine the cache index,
+    // because no input can simultaneously use both.
+    return 3 * !!(hash_type & SIGHASH_ANYONECANPAY) +
+           2 * ((hash_type & 0x1f) == SIGHASH_SINGLE) +
+           1 * ((hash_type & 0x1f) == SIGHASH_NONE);
+}
+
+bool SigHashCache::Load(int32_t hash_type, const CScript& script_code, HashWriter& writer) const noexcept
+{
+    auto& entry = m_cache_entries[CacheIndex(hash_type)];
+    if (entry.has_value()) {
+        if (script_code == entry->first) {
+            writer = HashWriter(entry->second);
+            return true;
+        }
+    }
+    return false;
+}
+
+void SigHashCache::Store(int32_t hash_type, const CScript& script_code, const HashWriter& writer) noexcept
+{
+    auto& entry = m_cache_entries[CacheIndex(hash_type)];
+    entry.emplace(script_code, writer);
+}
+
 template <class T>
-uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn, int32_t nHashType, const CAmount& amount, SigVersion sigversion, const PrecomputedTransactionData* cache)
+uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn, int32_t nHashType, const CAmount& amount, SigVersion sigversion, const PrecomputedTransactionData* cache, SigHashCache* sighash_cache)
 {
     assert(nIn < txTo.vin.size());
+
+    if (sigversion != SigVersion::WITNESS_V0) {
+        // Check for invalid use of SIGHASH_SINGLE
+        if ((nHashType & 0x1f) == SIGHASH_SINGLE) {
+            if (nIn >= txTo.vout.size()) {
+                //  nOut out of range
+                return uint256::ONE;
+            }
+        }
+    }
+
+    HashWriter ss{};
+
+    // Try to compute using cached SHA256 midstate.
+    if (sighash_cache && sighash_cache->Load(nHashType, scriptCode, ss)) {
+        // Add sighash type and hash.
+        ss << nHashType;
+        return ss.GetHash();
+    }
 
     if (sigversion == SigVersion::WITNESS_V0) {
         uint256 hashPrevouts;
@@ -1595,16 +1655,14 @@ uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn
             hashSequence = cacheready ? cache->hashSequence : SHA256Uint256(GetSequencesSHA256(txTo));
         }
 
-
         if ((nHashType & 0x1f) != SIGHASH_SINGLE && (nHashType & 0x1f) != SIGHASH_NONE) {
             hashOutputs = cacheready ? cache->hashOutputs : SHA256Uint256(GetOutputsSHA256(txTo));
         } else if ((nHashType & 0x1f) == SIGHASH_SINGLE && nIn < txTo.vout.size()) {
-            HashWriter ss{};
-            ss << txTo.vout[nIn];
-            hashOutputs = ss.GetHash();
+            HashWriter inner_ss{};
+            inner_ss << txTo.vout[nIn];
+            hashOutputs = inner_ss.GetHash();
         }
 
-        HashWriter ss{};
         // Version
         ss << txTo.version;
         // Input prevouts/nSequence (none/all, depending on flags)
@@ -1621,26 +1679,21 @@ uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn
         ss << hashOutputs;
         // Locktime
         ss << txTo.nLockTime;
-        // Sighash type
-        ss << nHashType;
+    } else {
+        // Wrapper to serialize only the necessary parts of the transaction being signed
+        CTransactionSignatureSerializer<T> txTmp(txTo, scriptCode, nIn, nHashType);
 
-        return ss.GetHash();
+        // Serialize
+        ss << txTmp;
     }
 
-    // Check for invalid use of SIGHASH_SINGLE
-    if ((nHashType & 0x1f) == SIGHASH_SINGLE) {
-        if (nIn >= txTo.vout.size()) {
-            //  nOut out of range
-            return uint256::ONE;
-        }
+    // If a cache object was provided, store the midstate there.
+    if (sighash_cache != nullptr) {
+        sighash_cache->Store(nHashType, scriptCode, ss);
     }
 
-    // Wrapper to serialize only the necessary parts of the transaction being signed
-    CTransactionSignatureSerializer<T> txTmp(txTo, scriptCode, nIn, nHashType);
-
-    // Serialize and hash
-    HashWriter ss{};
-    ss << txTmp << nHashType;
+    // Add sighash type and hash.
+    ss << nHashType;
     return ss.GetHash();
 }
 
@@ -1673,7 +1726,7 @@ bool GenericTransactionSignatureChecker<T>::CheckECDSASignature(const std::vecto
     // Witness sighashes need the amount.
     if (sigversion == SigVersion::WITNESS_V0 && amount < 0) return HandleMissingData(m_mdb);
 
-    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata);
+    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata, &m_sighash_cache);
 
     if (!VerifyECDSASignature(vchSig, pubkey, sighash))
         return false;
@@ -1807,19 +1860,19 @@ static bool CreateSLHDSAMessageHash(uint256& hash_out, ScriptExecutionData& exec
 
 // Handle SLH-DSA signature verification for OP_SUCCESS127
 template<typename T>
-static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& exec_script, unsigned int flags, const GenericTransactionSignatureChecker<T>& checker, ScriptExecutionData& execdata, ScriptError* serror)
+static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& exec_script, script_verify_flags flags, const GenericTransactionSignatureChecker<T>& checker, ScriptExecutionData& execdata, ScriptError* serror)
 {
-    LogPrintf("SLH-DSA DEBUG: HandleSLHDSASignature called with stack size %zu, script size %zu\n", stack.size(), exec_script.size());
+    LogInfo("SLH-DSA DEBUG: HandleSLHDSASignature called with stack size %zu, script size %zu\n", stack.size(), exec_script.size());
     
     // Add comparison debugging for different script formats
-    LogPrintf("SLH-DSA DEBUG: ===== SCRIPT FORMAT COMPARISON =====\n");
-    LogPrintf("SLH-DSA DEBUG: Current script size: %zu\n", exec_script.size());
+    LogInfo("SLH-DSA DEBUG: ===== SCRIPT FORMAT COMPARISON =====\n");
+    LogInfo("SLH-DSA DEBUG: Current script size: %zu\n", exec_script.size());
     if (exec_script.size() == 70) {
-        LogPrintf("SLH-DSA DEBUG: This is COMBINED format - comparing with SLH_DSA_ONLY behavior\n");
+        LogInfo("SLH-DSA DEBUG: This is COMBINED format - comparing with SLH_DSA_ONLY behavior\n");
     } else if (exec_script.size() == 34) {
-        LogPrintf("SLH-DSA DEBUG: This is SIMPLE format - should work like SLH_DSA_ONLY\n");
+        LogInfo("SLH-DSA DEBUG: This is SIMPLE format - should work like SLH_DSA_ONLY\n");
     }
-    LogPrintf("SLH-DSA DEBUG: ===== END SCRIPT FORMAT COMPARISON =====\n");
+    LogInfo("SLH-DSA DEBUG: ===== END SCRIPT FORMAT COMPARISON =====\n");
     
     valtype signature;
     valtype pubkey;
@@ -1830,10 +1883,10 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
     
     if (exec_script.size() == 34) {
         // Format 1: Simple SLH-DSA only script
-        LogPrintf("SLH-DSA DEBUG: Detected simple SLH-DSA script format (34 bytes)\n");
+        LogInfo("SLH-DSA DEBUG: Detected simple SLH-DSA script format (34 bytes)\n");
         
         if (stack.size() != 1) {
-            LogPrintf("SLH-DSA DEBUG: Expected stack size 1 for simple format, got %zu\n", stack.size());
+            LogInfo("SLH-DSA DEBUG: Expected stack size 1 for simple format, got %zu\n", stack.size());
             return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
         }
         
@@ -1843,65 +1896,65 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
         
     } else if (exec_script.size() == 70) {
         // Format 2: Combined Schnorr + SLH-DSA script
-        LogPrintf("SLH-DSA DEBUG: Detected combined Schnorr+SLH-DSA script format (70 bytes)\n");
+        LogInfo("SLH-DSA DEBUG: Detected combined Schnorr+SLH-DSA script format (70 bytes)\n");
         
         // Add detailed script format debugging
-        LogPrintf("SLH-DSA DEBUG: ===== SCRIPT FORMAT ANALYSIS =====\n");
-        LogPrintf("SLH-DSA DEBUG: Script size: %zu bytes\n", exec_script.size());
+        LogInfo("SLH-DSA DEBUG: ===== SCRIPT FORMAT ANALYSIS =====\n");
+        LogInfo("SLH-DSA DEBUG: Script size: %zu bytes\n", exec_script.size());
         
-        LogPrintf("SLH-DSA DEBUG: Combined script format detected\n");
-        LogPrintf("SLH-DSA DEBUG: Schnorr pubkey (bytes 1-32): %s\n", HexStr(std::span<const uint8_t>(exec_script.begin() + 1, 32)).c_str());
+        LogInfo("SLH-DSA DEBUG: Combined script format detected\n");
+        LogInfo("SLH-DSA DEBUG: Schnorr pubkey (bytes 1-32): %s\n", HexStr(std::span<const uint8_t>(exec_script.begin() + 1, 32)).c_str());
         
-        LogPrintf("SLH-DSA DEBUG: SLH-DSA pubkey (bytes 35-66): %s\n", HexStr(std::span<const uint8_t>(exec_script.begin() + 35, 32)).c_str());
-        LogPrintf("SLH-DSA DEBUG: ===== END SCRIPT FORMAT ANALYSIS =====\n");
+        LogInfo("SLH-DSA DEBUG: SLH-DSA pubkey (bytes 35-66): %s\n", HexStr(std::span<const uint8_t>(exec_script.begin() + 35, 32)).c_str());
+        LogInfo("SLH-DSA DEBUG: ===== END SCRIPT FORMAT ANALYSIS =====\n");
         
         if (stack.size() == 1 && stack[0].size() == 7922) {
             // Combined witness element: [schnorr_sig(64) + sighash(1) + slh_dsa_sig(7856) + sighash(1)]
-            LogPrintf("SLH-DSA DEBUG: Combined witness element detected, size: %zu\n", stack[0].size());
+            LogInfo("SLH-DSA DEBUG: Combined witness element detected, size: %zu\n", stack[0].size());
             
             valtype combined_sig = stack[0];
             
             // Extract Schnorr signature (first 64 bytes)
             valtype schnorr_sig = valtype(combined_sig.begin(), combined_sig.begin() + 64);
-            LogPrintf("SLH-DSA DEBUG: Extracted Schnorr signature, size: %zu\n", schnorr_sig.size());
+            LogInfo("SLH-DSA DEBUG: Extracted Schnorr signature, size: %zu\n", schnorr_sig.size());
             
             // Extract SLH-DSA signature (skip schnorr + sighash, get next 7856 bytes)
             valtype slh_dsa_sig = valtype(combined_sig.begin() + 65, combined_sig.begin() + 65 + 7856);
-            LogPrintf("SLH-DSA DEBUG: Extracted SLH-DSA signature, size: %zu\n", slh_dsa_sig.size());
+            LogInfo("SLH-DSA DEBUG: Extracted SLH-DSA signature, size: %zu\n", slh_dsa_sig.size());
             
             // Use the extracted SLH-DSA signature for verification
             signature = slh_dsa_sig;
             
-            LogPrintf("SLH-DSA DEBUG: Using extracted SLH-DSA signature for verification\n");
+            LogInfo("SLH-DSA DEBUG: Using extracted SLH-DSA signature for verification\n");
         } else if (stack.size() == 2 && stack[0].size() == 64 && stack[1].size() == 7856) {
             // Legacy format: [schnorr_sig, slh_dsa_sig]
-            LogPrintf("SLH-DSA DEBUG: Legacy format detected, using SLH-DSA signature from stack[1]\n");
+            LogInfo("SLH-DSA DEBUG: Legacy format detected, using SLH-DSA signature from stack[1]\n");
             signature = stack[1];
         } else if (stack.size() >= 3) {
             // Post-OP_CHECKSIG state: [slh_dsa_pubkey, schnorr_result, slh_dsa_sig, ...]
-            LogPrintf("SLH-DSA DEBUG: Post-OP_CHECKSIG state detected\n");
+            LogInfo("SLH-DSA DEBUG: Post-OP_CHECKSIG state detected\n");
             
             // Check if Schnorr verification succeeded (stack[1])
             if (stack[1].size() != 1 || stack[1][0] != 1) {
-                LogPrintf("SLH-DSA DEBUG: Schnorr verification failed, cannot proceed with SLH-DSA\n");
+                LogInfo("SLH-DSA DEBUG: Schnorr verification failed, cannot proceed with SLH-DSA\n");
                 return set_error(serror, SCRIPT_ERR_SLHDSA_SIG);
             }
             
         // Get SLH-DSA signature from stack[2]
         signature = stack[2];
-        LogPrintf("SLH-DSA DEBUG: Using SLH-DSA signature from stack[2], size: %zu\n", signature.size());
+        LogInfo("SLH-DSA DEBUG: Using SLH-DSA signature from stack[2], size: %zu\n", signature.size());
         
         // Add detailed stack state debugging
-        LogPrintf("SLH-DSA DEBUG: ===== STACK STATE ANALYSIS =====\n");
-        LogPrintf("SLH-DSA DEBUG: Stack size: %zu\n", stack.size());
+        LogInfo("SLH-DSA DEBUG: ===== STACK STATE ANALYSIS =====\n");
+        LogInfo("SLH-DSA DEBUG: Stack size: %zu\n", stack.size());
         for (size_t i = 0; i < stack.size(); i++) {
-            LogPrintf("SLH-DSA DEBUG: Stack[%zu]: size=%zu, first_16_bytes=%s\n", 
+            LogInfo("SLH-DSA DEBUG: Stack[%zu]: size=%zu, first_16_bytes=%s\n", 
                       i, stack[i].size(), 
                       HexStr(std::span<const uint8_t>(stack[i].data(), std::min(stack[i].size(), (size_t)16))).c_str());
         }
-        LogPrintf("SLH-DSA DEBUG: ===== END STACK STATE ANALYSIS =====\n");
+        LogInfo("SLH-DSA DEBUG: ===== END STACK STATE ANALYSIS =====\n");
         } else {
-            LogPrintf("SLH-DSA DEBUG: Unexpected stack state for combined format, size: %zu\n", stack.size());
+            LogInfo("SLH-DSA DEBUG: Unexpected stack state for combined format, size: %zu\n", stack.size());
             return set_error(serror, SCRIPT_ERR_INVALID_STACK_OPERATION);
         }
         
@@ -1909,23 +1962,23 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
         // Script format: OP_PUSHBYTES_32 <schnorr_pubkey> OP_CHECKSIG OP_PUSHBYTES_32 <slh_dsa_pubkey> OP_SUBSTR OP_BOOLAND OP_VERIFY
         // SLH-DSA pubkey is at bytes 35-66 (after OP_PUSHBYTES_32 + 32-byte schnorr pubkey + OP_CHECKSIG + OP_PUSHBYTES_32)
         if (exec_script[34] != 0x20) {  // Check for OP_PUSHBYTES_32 before SLH-DSA pubkey
-            LogPrintf("SLH-DSA DEBUG: Invalid script format, expected OP_PUSHBYTES_32 at position 34\n");
+            LogInfo("SLH-DSA DEBUG: Invalid script format, expected OP_PUSHBYTES_32 at position 34\n");
             return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
         }
         
         pubkey = valtype(exec_script.begin() + 35, exec_script.begin() + 67);
-        LogPrintf("SLH-DSA DEBUG: Extracted SLH-DSA pubkey from combined script\n");
+        LogInfo("SLH-DSA DEBUG: Extracted SLH-DSA pubkey from combined script\n");
         
     } else {
-        LogPrintf("SLH-DSA DEBUG: Invalid script size %zu, expected 34 (simple) or 70 (combined)\n", exec_script.size());
+        LogInfo("SLH-DSA DEBUG: Invalid script size %zu, expected 34 (simple) or 70 (combined)\n", exec_script.size());
         return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
     }
     
-    LogPrintf("SLH-DSA DEBUG: signature size=%zu, pubkey size=%zu\n", signature.size(), pubkey.size());
+    LogInfo("SLH-DSA DEBUG: signature size=%zu, pubkey size=%zu\n", signature.size(), pubkey.size());
     
     // Validate signature size (SLH-DSA signatures are 7856 bytes)
     if (signature.size() < 100) {
-        LogPrintf("SLH-DSA DEBUG: Invalid signature size %zu, expected >= 100\n", signature.size());
+        LogInfo("SLH-DSA DEBUG: Invalid signature size %zu, expected >= 100\n", signature.size());
         return set_error(serror, SCRIPT_ERR_SLHDSA_SIG_SIZE);
     }
     
@@ -1938,16 +1991,16 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
     if (sig_size == 7857) {
         // Extract hash type from the last byte
         hashtype = signature[sig_size - 1];
-        LogPrintf("SLH-DSA DEBUG: Extracted hash type from signature: 0x%02x (%u)\n", 
+        LogInfo("SLH-DSA DEBUG: Extracted hash type from signature: 0x%02x (%u)\n", 
                   hashtype, hashtype);
         
         sig_size = 7856;  // Strip the hash type byte
-        LogPrintf("SLH-DSA DEBUG: Stripping hash type byte from signature (7857 -> 7856 bytes)\n");
+        LogInfo("SLH-DSA DEBUG: Stripping hash type byte from signature (7857 -> 7856 bytes)\n");
     } else if (exec_script.size() == 70) {
         // For P2MR combined Schnorr+SLH-DSA scripts (70 bytes), use SIGHASH_ALL
         // This matches the behavior of the Rust implementation
         hashtype = SIGHASH_ALL;
-        LogPrintf("SLH-DSA DEBUG: P2MR combined script detected, using SIGHASH_ALL (0x%02x)\n", hashtype);
+        LogInfo("SLH-DSA DEBUG: P2MR combined script detected, using SIGHASH_ALL (0x%02x)\n", hashtype);
     }
     
     // Create message hash for SLH-DSA verification using the extracted hash type
@@ -1961,56 +2014,56 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
     
     // Create the message hash using the extracted hash type (same as Schnorr signatures)
     if (!CreateSLHDSAMessageHash(message_hash, execdata, *checker.txTo, checker.nIn, hashtype, *checker.txdata, checker.m_mdb)) {
-        LogPrintf("SLH-DSA DEBUG: Failed to create message hash with hashtype 0x%02x\n", hashtype);
+        LogInfo("SLH-DSA DEBUG: Failed to create message hash with hashtype 0x%02x\n", hashtype);
         return set_error(serror, SCRIPT_ERR_SLHDSA_SIG);
     }
     
-    LogPrintf("SLH-DSA DEBUG: Created message hash with hashtype 0x%02x: %s\n", 
+    LogInfo("SLH-DSA DEBUG: Created message hash with hashtype 0x%02x: %s\n", 
               hashtype, message_hash.ToString().c_str());
     
     // Add comprehensive debugging
-    LogPrintf("SLH-DSA DEBUG: ===== DETAILED DEBUGGING =====\n");
-    LogPrintf("SLH-DSA DEBUG: Script size: %zu bytes\n", exec_script.size());
-    LogPrintf("SLH-DSA DEBUG: Stack size: %zu\n", stack.size());
-    LogPrintf("SLH-DSA DEBUG: Flags: 0x%x\n", flags);
+    LogInfo("SLH-DSA DEBUG: ===== DETAILED DEBUGGING =====\n");
+    LogInfo("SLH-DSA DEBUG: Script size: %zu bytes\n", exec_script.size());
+    LogInfo("SLH-DSA DEBUG: Stack size: %zu\n", stack.size());
+    LogInfo("SLH-DSA DEBUG: Flags: 0x%x\n", flags.as_int());
     
     // Debug the exact message being hashed
-    LogPrintf("SLH-DSA DEBUG: Message hash bytes (hex): %s\n", HexStr(message_hash).c_str());
+    LogInfo("SLH-DSA DEBUG: Message hash bytes (hex): %s\n", HexStr(message_hash).c_str());
     
     // Debug signature details
-    LogPrintf("SLH-DSA DEBUG: Signature bytes (first 32): %s\n", 
+    LogInfo("SLH-DSA DEBUG: Signature bytes (first 32): %s\n", 
               HexStr(std::span<const uint8_t>(signature.begin(), std::min(signature.size(), (size_t)32))).c_str());
     
     // Debug public key details
-    LogPrintf("SLH-DSA DEBUG: Public key bytes (hex): %s\n", HexStr(pubkey).c_str());
+    LogInfo("SLH-DSA DEBUG: Public key bytes (hex): %s\n", HexStr(pubkey).c_str());
     
-    LogPrintf("SLH-DSA DEBUG: ===== END DETAILED DEBUGGING =====\n");
+    LogInfo("SLH-DSA DEBUG: ===== END DETAILED DEBUGGING =====\n");
     
-    LogPrintf("SLH-DSA DEBUG: Using algorithm BITCOIN_PQC_SLH_DSA_SHAKE_128S\n");
-    LogPrintf("SLH-DSA DEBUG: Full Pubkey: %s\n", HexStr(pubkey).c_str());
-    LogPrintf("SLH-DSA DEBUG: Full Message hash (sighash): %s\n", HexStr(message_hash).c_str());
-    LogPrintf("SLH-DSA DEBUG: Signature (first 16 bytes): %s\n", HexStr(std::span<const uint8_t>(signature.data(), 16)).c_str());
-    LogPrintf("SLH-DSA DEBUG: Signature (last 16 bytes): %s\n", HexStr(std::span<const uint8_t>(signature.data() + signature.size() - 16, 16)).c_str());
+    LogInfo("SLH-DSA DEBUG: Using algorithm BITCOIN_PQC_SLH_DSA_SHAKE_128S\n");
+    LogInfo("SLH-DSA DEBUG: Full Pubkey: %s\n", HexStr(pubkey).c_str());
+    LogInfo("SLH-DSA DEBUG: Full Message hash (sighash): %s\n", HexStr(message_hash).c_str());
+    LogInfo("SLH-DSA DEBUG: Signature (first 16 bytes): %s\n", HexStr(std::span<const uint8_t>(signature.data(), 16)).c_str());
+    LogInfo("SLH-DSA DEBUG: Signature (last 16 bytes): %s\n", HexStr(std::span<const uint8_t>(signature.data() + signature.size() - 16, 16)).c_str());
     
     // Debug: Check sizes match library expectations
-    LogPrintf("SLH-DSA DEBUG: Pubkey size: %zu bytes (expected: 32)\n", pubkey.size());
-    LogPrintf("SLH-DSA DEBUG: Signature size: %zu bytes (expected: 7856)\n", signature.size());
-    LogPrintf("SLH-DSA DEBUG: Message hash size: %zu bytes (expected: 32)\n", message_hash.size());
+    LogInfo("SLH-DSA DEBUG: Pubkey size: %zu bytes (expected: 32)\n", pubkey.size());
+    LogInfo("SLH-DSA DEBUG: Signature size: %zu bytes (expected: 7856)\n", signature.size());
+    LogInfo("SLH-DSA DEBUG: Message hash size: %zu bytes (expected: 32)\n", message_hash.size());
     
     // Add transaction context debugging
-    LogPrintf("SLH-DSA DEBUG: ===== TRANSACTION CONTEXT =====\n");
-    LogPrintf("SLH-DSA DEBUG: Hashtype: 0x%02x\n", hashtype);
-    LogPrintf("SLH-DSA DEBUG: Message hash size: %zu\n", message_hash.size());
-    LogPrintf("SLH-DSA DEBUG: Message hash (reversed for display): %s\n", HexStr(message_hash).c_str());
+    LogInfo("SLH-DSA DEBUG: ===== TRANSACTION CONTEXT =====\n");
+    LogInfo("SLH-DSA DEBUG: Hashtype: 0x%02x\n", hashtype);
+    LogInfo("SLH-DSA DEBUG: Message hash size: %zu\n", message_hash.size());
+    LogInfo("SLH-DSA DEBUG: Message hash (reversed for display): %s\n", HexStr(message_hash).c_str());
 
     // Debug the exact bytes being passed to slh_dsa_shake_128s_verify
-    LogPrintf("SLH-DSA DEBUG: About to call slh_dsa_shake_128s_verify with:\n");
-    LogPrintf("SLH-DSA DEBUG: - Signature: %s...%s\n", 
+    LogInfo("SLH-DSA DEBUG: About to call slh_dsa_shake_128s_verify with:\n");
+    LogInfo("SLH-DSA DEBUG: - Signature: %s...%s\n", 
           HexStr(std::span<const uint8_t>(signature.data(), 16)).c_str(),
           HexStr(std::span<const uint8_t>(signature.data() + signature.size() - 16, 16)).c_str());
-    LogPrintf("SLH-DSA DEBUG: - Public key: %s\n", HexStr(pubkey).c_str());
-    LogPrintf("SLH-DSA DEBUG: - Message hash: %s\n", HexStr(message_hash).c_str());
-    LogPrintf("SLH-DSA DEBUG: ===== END TRANSACTION CONTEXT =====\n");
+    LogInfo("SLH-DSA DEBUG: - Public key: %s\n", HexStr(pubkey).c_str());
+    LogInfo("SLH-DSA DEBUG: - Message hash: %s\n", HexStr(message_hash).c_str());
+    LogInfo("SLH-DSA DEBUG: ===== END TRANSACTION CONTEXT =====\n");
     
     // Use the low-level SLH-DSA function directly (matches our 32-byte pubkeys and 7856-byte signatures)
     int result = slh_dsa_shake_128s_verify(
@@ -2021,14 +2074,14 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
         pubkey.data()
     );
     
-    LogPrintf("SLH-DSA DEBUG: slh_dsa_shake_128s_verify returned: %d\n", result);
+    LogInfo("SLH-DSA DEBUG: slh_dsa_shake_128s_verify returned: %d\n", result);
     
     if (result != 0) {
-        LogPrintf("SLH-DSA DEBUG: SLH-DSA signature verification failed with error %d\n", result);
+        LogInfo("SLH-DSA DEBUG: SLH-DSA signature verification failed with error %d\n", result);
         return set_error(serror, SCRIPT_ERR_SLHDSA_SIG);
     }
     
-    LogPrintf("SLH-DSA DEBUG: SLH-DSA signature verification successful!\n");
+    LogInfo("SLH-DSA DEBUG: SLH-DSA signature verification successful!\n");
     
     // Handle stack based on script format
     if (exec_script.size() == 34) {
@@ -2044,7 +2097,7 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
             // Post-OP_CHECKSIG state: [slh_dsa_pubkey, schnorr_result, slh_dsa_sig, ...] -> [slh_dsa_pubkey, schnorr_result, slh_dsa_result, ...]
             stack[2] = valtype(1, 1); // Replace SLH-DSA signature with success result
         } else {
-            LogPrintf("SLH-DSA DEBUG: Unexpected stack size %zu for combined format\n", stack.size());
+            LogInfo("SLH-DSA DEBUG: Unexpected stack size %zu for combined format\n", stack.size());
         }
     }
     
@@ -2055,9 +2108,9 @@ static bool HandleSLHDSASignature(std::vector<valtype>& stack, const CScript& ex
 template class GenericTransactionSignatureChecker<CTransaction>;
 template class GenericTransactionSignatureChecker<CMutableTransaction>;
 
-static bool ExecuteWitnessScript(const std::span<const valtype>& stack_span, const CScript& exec_script, unsigned int flags, SigVersion sigversion, const BaseSignatureChecker& checker, ScriptExecutionData& execdata, ScriptError* serror)
+static bool ExecuteWitnessScript(const std::span<const valtype>& stack_span, const CScript& exec_script, script_verify_flags flags, SigVersion sigversion, const BaseSignatureChecker& checker, ScriptExecutionData& execdata, ScriptError* serror)
 {
-    LogPrintf("SLH-DSA DEBUG: ExecuteWitnessScript called with sigversion=%d, script size=%zu\n", (int)sigversion, exec_script.size());
+    LogInfo("SLH-DSA DEBUG: ExecuteWitnessScript called with sigversion=%d, script size=%zu\n", (int)sigversion, exec_script.size());
     std::vector<valtype> stack{stack_span.begin(), stack_span.end()};
 
     if (sigversion == SigVersion::TAPSCRIPT) {
@@ -2070,68 +2123,68 @@ static bool ExecuteWitnessScript(const std::span<const valtype>& stack_span, con
                 // Note how this condition would not be reached if an unknown OP_SUCCESSx was found
                 return set_error(serror, SCRIPT_ERR_BAD_OPCODE);
             }
-            LogPrintf("SLH-DSA DEBUG: Processing opcode %d (0x%02x), IsOpSuccess=%d\n", opcode, opcode, IsOpSuccess(opcode));
+            LogInfo("SLH-DSA DEBUG: Processing opcode %d (0x%02x), IsOpSuccess=%d\n", opcode, opcode, IsOpSuccess(opcode));
             // New opcodes will be listed here. May use a different sigversion to modify existing opcodes.
             if (IsOpSuccess(opcode)) {
                 // Handle OP_SUCCESS127 for SLH-DSA signatures
                 if (opcode == OP_SUBSTR) {
-                    LogPrintf("SLH-DSA DEBUG: Found OP_SUBSTR (OP_SUCCESS127), checking for SLH-DSA signature\n");
+                    LogInfo("SLH-DSA DEBUG: Found OP_SUBSTR (OP_SUCCESS127), checking for SLH-DSA signature\n");
                     
                     // Check for combined script format (70 bytes) or simple format (34 bytes)
                     bool is_combined_format = (exec_script.size() == 70);
                     bool is_simple_format = (exec_script.size() == 34);
                     
                     if (is_combined_format) {
-                        LogPrintf("SLH-DSA DEBUG: Combined script format detected (70 bytes), checking stack contents\n");
-                        LogPrintf("SLH-DSA DEBUG: Stack size: %zu\n", stack.size());
+                        LogInfo("SLH-DSA DEBUG: Combined script format detected (70 bytes), checking stack contents\n");
+                        LogInfo("SLH-DSA DEBUG: Stack size: %zu\n", stack.size());
                         for (size_t i = 0; i < stack.size(); i++) {
-                            LogPrintf("SLH-DSA DEBUG: Stack[%zu] size: %zu\n", i, stack[i].size());
+                            LogInfo("SLH-DSA DEBUG: Stack[%zu] size: %zu\n", i, stack[i].size());
                         }
                         
                         // Add execution flow debugging
-                        LogPrintf("SLH-DSA DEBUG: ===== EXECUTION FLOW ANALYSIS =====\n");
-                        LogPrintf("SLH-DSA DEBUG: Script execution reached OP_SUBSTR\n");
-                        LogPrintf("SLH-DSA DEBUG: Previous opcodes executed:\n");
-                        LogPrintf("SLH-DSA DEBUG: - OP_PUSHBYTES_32 (Schnorr pubkey)\n");
-                        LogPrintf("SLH-DSA DEBUG: - OP_CHECKSIG (Schnorr verification)\n");
-                        LogPrintf("SLH-DSA DEBUG: - OP_PUSHBYTES_32 (SLH-DSA pubkey)\n");
-                        LogPrintf("SLH-DSA DEBUG: - OP_SUBSTR (SLH-DSA verification)\n");
-                        LogPrintf("SLH-DSA DEBUG: ===== END EXECUTION FLOW ANALYSIS =====\n");
+                        LogInfo("SLH-DSA DEBUG: ===== EXECUTION FLOW ANALYSIS =====\n");
+                        LogInfo("SLH-DSA DEBUG: Script execution reached OP_SUBSTR\n");
+                        LogInfo("SLH-DSA DEBUG: Previous opcodes executed:\n");
+                        LogInfo("SLH-DSA DEBUG: - OP_PUSHBYTES_32 (Schnorr pubkey)\n");
+                        LogInfo("SLH-DSA DEBUG: - OP_CHECKSIG (Schnorr verification)\n");
+                        LogInfo("SLH-DSA DEBUG: - OP_PUSHBYTES_32 (SLH-DSA pubkey)\n");
+                        LogInfo("SLH-DSA DEBUG: - OP_SUBSTR (SLH-DSA verification)\n");
+                        LogInfo("SLH-DSA DEBUG: ===== END EXECUTION FLOW ANALYSIS =====\n");
                         
                         // For combined format, we need to handle the case where OP_CHECKSIG hasn't been executed yet
                         // The stack might be: [schnorr_sig, slh_dsa_sig] or [slh_dsa_pubkey, schnorr_result, slh_dsa_sig]
                         // Or the new combined format: [combined_sig(7922 bytes)]
                         if (stack.size() == 1 && stack[0].size() == 7922) {
-                            LogPrintf("SLH-DSA DEBUG: Detected combined witness element (7922 bytes), proceeding with SLH-DSA verification\n");
+                            LogInfo("SLH-DSA DEBUG: Detected combined witness element (7922 bytes), proceeding with SLH-DSA verification\n");
                             found_op_success127 = true;
                             const auto* tx_checker = dynamic_cast<const GenericTransactionSignatureChecker<CTransaction>*>(&checker);
                             if (!tx_checker) {
-                                LogPrintf("SLH-DSA DEBUG: Failed to cast checker to transaction checker\n");
+                                LogInfo("SLH-DSA DEBUG: Failed to cast checker to transaction checker\n");
                                 return set_error(serror, SCRIPT_ERR_SLHDSA_SIG);
                             }
                             return HandleSLHDSASignature(stack, exec_script, flags, *tx_checker, execdata, serror);
                         } else if (stack.size() == 2 && stack[0].size() == 64 && stack[1].size() == 7856) {
-                            LogPrintf("SLH-DSA DEBUG: Detected pre-OP_CHECKSIG state, Schnorr sig and SLH-DSA sig present\n");
-                            LogPrintf("SLH-DSA DEBUG: This suggests OP_CHECKSIG failed or wasn't executed properly\n");
-                            LogPrintf("SLH-DSA DEBUG: Proceeding with SLH-DSA verification anyway for debugging\n");
+                            LogInfo("SLH-DSA DEBUG: Detected pre-OP_CHECKSIG state, Schnorr sig and SLH-DSA sig present\n");
+                            LogInfo("SLH-DSA DEBUG: This suggests OP_CHECKSIG failed or wasn't executed properly\n");
+                            LogInfo("SLH-DSA DEBUG: Proceeding with SLH-DSA verification anyway for debugging\n");
                             found_op_success127 = true;
                             const auto* tx_checker = dynamic_cast<const GenericTransactionSignatureChecker<CTransaction>*>(&checker);
                             if (!tx_checker) {
-                                LogPrintf("SLH-DSA DEBUG: Failed to cast checker to transaction checker\n");
+                                LogInfo("SLH-DSA DEBUG: Failed to cast checker to transaction checker\n");
                                 return set_error(serror, SCRIPT_ERR_SLHDSA_SIG);
                             }
                             return HandleSLHDSASignature(stack, exec_script, flags, *tx_checker, execdata, serror);
                         } else if (stack.size() >= 3 && stack[1].size() == 1 && stack[1][0] == 1 && stack[2].size() >= 7856) {
-                            LogPrintf("SLH-DSA DEBUG: Schnorr verification succeeded and SLH-DSA signature found, proceeding\n");
+                            LogInfo("SLH-DSA DEBUG: Schnorr verification succeeded and SLH-DSA signature found, proceeding\n");
                             found_op_success127 = true;
                             const auto* tx_checker = dynamic_cast<const GenericTransactionSignatureChecker<CTransaction>*>(&checker);
                             if (!tx_checker) {
-                                LogPrintf("SLH-DSA DEBUG: Failed to cast checker to transaction checker\n");
+                                LogInfo("SLH-DSA DEBUG: Failed to cast checker to transaction checker\n");
                                 return set_error(serror, SCRIPT_ERR_SLHDSA_SIG);
                             }
                             return HandleSLHDSASignature(stack, exec_script, flags, *tx_checker, execdata, serror);
                         } else {
-                            LogPrintf("SLH-DSA DEBUG: Invalid stack state - Schnorr result: %s, SLH-DSA sig size: %zu\n", 
+                            LogInfo("SLH-DSA DEBUG: Invalid stack state - Schnorr result: %s, SLH-DSA sig size: %zu\n", 
                                       stack.size() >= 2 ? (stack[1].size() == 1 && stack[1][0] == 1 ? "success" : "failed") : "missing",
                                       stack.size() >= 3 ? stack[2].size() : 0);
                             return set_error(serror, SCRIPT_ERR_SLHDSA_SIG);
@@ -2139,16 +2192,16 @@ static bool ExecuteWitnessScript(const std::span<const valtype>& stack_span, con
                     } else if (is_simple_format) {
                         // Simple format: check for large signature (7856+ bytes)
                         if (stack.size() >= 1 && stack[0].size() >= 7856) {
-                            LogPrintf("SLH-DSA DEBUG: Large signature detected (%zu bytes), calling HandleSLHDSASignature\n", stack[0].size());
+                            LogInfo("SLH-DSA DEBUG: Large signature detected (%zu bytes), calling HandleSLHDSASignature\n", stack[0].size());
                             found_op_success127 = true;
                             const auto* tx_checker = dynamic_cast<const GenericTransactionSignatureChecker<CTransaction>*>(&checker);
                             if (!tx_checker) {
-                                LogPrintf("SLH-DSA DEBUG: Failed to cast checker to transaction checker\n");
+                                LogInfo("SLH-DSA DEBUG: Failed to cast checker to transaction checker\n");
                                 return set_error(serror, SCRIPT_ERR_SLHDSA_SIG);
                             }
                             return HandleSLHDSASignature(stack, exec_script, flags, *tx_checker, execdata, serror);
                         } else {
-                            LogPrintf("SLH-DSA DEBUG: OP_SUBSTR found but signature size %zu < 7856, treating as normal OP_SUCCESS\n", 
+                            LogInfo("SLH-DSA DEBUG: OP_SUBSTR found but signature size %zu < 7856, treating as normal OP_SUCCESS\n", 
                                       stack.size() > 0 ? stack[0].size() : 0);
                             // Check if we should discourage OP_SUCCESS (for mempool policy)
                             if (flags & SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS) {
@@ -2158,7 +2211,7 @@ static bool ExecuteWitnessScript(const std::span<const valtype>& stack_span, con
                             return set_success(serror);
                         }
                     } else {
-                        LogPrintf("SLH-DSA DEBUG: Unknown script format (size %zu), treating as normal OP_SUCCESS\n", exec_script.size());
+                        LogInfo("SLH-DSA DEBUG: Unknown script format (size %zu), treating as normal OP_SUCCESS\n", exec_script.size());
                         // Check if we should discourage OP_SUCCESS (for mempool policy)
                         if (flags & SCRIPT_VERIFY_DISCOURAGE_OP_SUCCESS) {
                             return set_error(serror, SCRIPT_ERR_DISCOURAGE_OP_SUCCESS);
@@ -2186,7 +2239,7 @@ static bool ExecuteWitnessScript(const std::span<const valtype>& stack_span, con
         // Disallow stack item size > max_element_size in witness stack
         for (const auto& elem : stack) {
             if (elem.size() > max_element_size) {
-                LogPrintf("SLH-DSA DEBUG: Stack element size %zu exceeds limit %u (found_op_success127=%d)\n", 
+                LogInfo("SLH-DSA DEBUG: Stack element size %zu exceeds limit %u (found_op_success127=%d)\n", 
                          elem.size(), max_element_size, found_op_success127);
                 return set_error(serror, SCRIPT_ERR_PUSH_SIZE);
             }
@@ -2268,7 +2321,7 @@ static bool VerifyTaprootCommitment(const std::vector<unsigned char>& control, c
 }
 
 static bool VerifyScriptInTshMerkleRootPath(
-    const std::vector<unsigned char>& control, 
+    const std::vector<unsigned char>& control,
     const std::vector<unsigned char>& merkle_root, const CScript& script)
 {
     assert(control.size() >= P2MR_CONTROL_BASE_SIZE);
@@ -2276,16 +2329,16 @@ static bool VerifyScriptInTshMerkleRootPath(
 
     // Compute the tapleaf hash from the script
     const uint256 tapleaf_hash = ComputeTapleafHash(control[0] & TAPROOT_LEAF_MASK, script);
-    
+
     // Compute the Merkle root from the leaf and the provided path.
     const uint256 derived_merkle_root = ComputeTshMerkleRoot(control, tapleaf_hash);
-    
+
     // Verify that the computed Merkle root matches the merkle_root
     return derived_merkle_root == uint256(merkle_root);
 }
 
 
-static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, const std::vector<unsigned char>& program, unsigned int flags, const BaseSignatureChecker& checker, ScriptError* serror, bool is_p2sh)
+static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, const std::vector<unsigned char>& program, script_verify_flags flags, const BaseSignatureChecker& checker, ScriptError* serror, bool is_p2sh)
 {
     CScript exec_script; //!< Actually executed script (last stack item in P2WSH; implied P2PKH script in P2WPKH; leaf script in P2TR)
     std::span stack{witness.stack};
@@ -2435,7 +2488,7 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
     // There is intentionally no return statement here, to be able to use "control reaches end of non-void function" warnings to detect gaps in the logic above.
 }
 
-bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CScriptWitness* witness, unsigned int flags, const BaseSignatureChecker& checker, ScriptError* serror)
+bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const CScriptWitness* witness, script_verify_flags flags, const BaseSignatureChecker& checker, ScriptError* serror)
 {
     static const CScriptWitness emptyWitness;
     if (witness == nullptr) {
@@ -2572,10 +2625,8 @@ size_t static WitnessSigOps(int witversion, const std::vector<unsigned char>& wi
     return 0;
 }
 
-size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey, const CScriptWitness* witness, unsigned int flags)
+size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey, const CScriptWitness& witness, script_verify_flags flags)
 {
-    static const CScriptWitness witnessEmpty;
-
     if ((flags & SCRIPT_VERIFY_WITNESS) == 0) {
         return 0;
     }
@@ -2584,7 +2635,7 @@ size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey,
     int witnessversion;
     std::vector<unsigned char> witnessprogram;
     if (scriptPubKey.IsWitnessProgram(witnessversion, witnessprogram)) {
-        return WitnessSigOps(witnessversion, witnessprogram, witness ? *witness : witnessEmpty);
+        return WitnessSigOps(witnessversion, witnessprogram, witness);
     }
 
     if (scriptPubKey.IsPayToScriptHash() && scriptSig.IsPushOnly()) {
@@ -2596,9 +2647,59 @@ size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey,
         }
         CScript subscript(data.begin(), data.end());
         if (subscript.IsWitnessProgram(witnessversion, witnessprogram)) {
-            return WitnessSigOps(witnessversion, witnessprogram, witness ? *witness : witnessEmpty);
+            return WitnessSigOps(witnessversion, witnessprogram, witness);
         }
     }
 
     return 0;
+}
+
+const std::map<std::string, script_verify_flag_name>& ScriptFlagNamesToEnum()
+{
+#define FLAG_NAME(flag) {std::string(#flag), SCRIPT_VERIFY_##flag}
+    static const std::map<std::string, script_verify_flag_name> g_names_to_enum{
+        FLAG_NAME(P2SH),
+        FLAG_NAME(STRICTENC),
+        FLAG_NAME(DERSIG),
+        FLAG_NAME(LOW_S),
+        FLAG_NAME(SIGPUSHONLY),
+        FLAG_NAME(MINIMALDATA),
+        FLAG_NAME(NULLDUMMY),
+        FLAG_NAME(DISCOURAGE_UPGRADABLE_NOPS),
+        FLAG_NAME(CLEANSTACK),
+        FLAG_NAME(MINIMALIF),
+        FLAG_NAME(NULLFAIL),
+        FLAG_NAME(CHECKLOCKTIMEVERIFY),
+        FLAG_NAME(CHECKSEQUENCEVERIFY),
+        FLAG_NAME(WITNESS),
+        FLAG_NAME(DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM),
+        FLAG_NAME(WITNESS_PUBKEYTYPE),
+        FLAG_NAME(CONST_SCRIPTCODE),
+        FLAG_NAME(TAPROOT),
+        FLAG_NAME(DISCOURAGE_UPGRADABLE_PUBKEYTYPE),
+        FLAG_NAME(DISCOURAGE_OP_SUCCESS),
+        FLAG_NAME(DISCOURAGE_UPGRADABLE_TAPROOT_VERSION),
+        FLAG_NAME(P2MR),
+    };
+#undef FLAG_NAME
+    return g_names_to_enum;
+}
+
+std::vector<std::string> GetScriptFlagNames(script_verify_flags flags)
+{
+    std::vector<std::string> res;
+    if (flags == SCRIPT_VERIFY_NONE) {
+        return res;
+    }
+    script_verify_flags leftover = flags;
+    for (const auto& [name, flag] : ScriptFlagNamesToEnum()) {
+        if ((flags & flag) != 0) {
+            res.push_back(name);
+            leftover &= ~flag;
+        }
+    }
+    if (leftover != 0) {
+        res.push_back(strprintf("0x%08x", leftover.as_int()));
+    }
+    return res;
 }

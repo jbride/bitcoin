@@ -29,13 +29,14 @@ void RpcInterruptionPoint();
  * immediately with RPC_IN_WARMUP.
  */
 void SetRPCWarmupStatus(const std::string& newStatus);
+void SetRPCWarmupStarting();
 /* Mark warmup as done.  RPC calls will be processed from now on.  */
 void SetRPCWarmupFinished();
 
 /* returns the current warmup state.  */
 bool RPCIsInWarmup(std::string *outStatus);
 
-typedef RPCHelpMan (*RpcMethodFnType)();
+typedef RPCMethod (*RpcMethodFnType)();
 
 class CRPCCommand
 {
@@ -88,7 +89,7 @@ private:
     std::map<std::string, std::vector<const CRPCCommand*>> mapCommands;
 public:
     CRPCTable();
-    std::string help(const std::string& name, const JSONRPCRequest& helpreq) const;
+    std::string help(std::string_view name, const JSONRPCRequest& helpreq) const;
 
     /**
      * Execute a method.

@@ -3,19 +3,24 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bench/bench.h>
-#include <consensus/amount.h>
+#include <consensus/consensus.h>
+#include <consensus/validation.h>
 #include <net.h>
 #include <policy/policy.h>
+#include <primitives/block.h>
 #include <primitives/transaction.h>
-#include <pubkey.h>
-#include <script/sign.h>
-#include <test/util/setup_common.h>
 #include <node/txorphanage.h>
-#include <util/check.h>
+#include <random.h>
 #include <test/util/transaction_utils.h>
+#include <threadsafety.h>
+#include <util/check.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <numeric>
+#include <vector>
 
 static constexpr node::TxOrphanage::Usage TINY_TX_WEIGHT{240};
 static constexpr int64_t APPROX_WEIGHT_PER_INPUT{200};
@@ -262,7 +267,7 @@ static void OrphanageEraseForPeer(benchmark::Bench& bench)
     OrphanageEraseAll(bench, /*block_or_disconnect=*/false);
 }
 
-BENCHMARK(OrphanageSinglePeerEviction, benchmark::PriorityLevel::LOW);
-BENCHMARK(OrphanageMultiPeerEviction, benchmark::PriorityLevel::LOW);
-BENCHMARK(OrphanageEraseForBlock, benchmark::PriorityLevel::LOW);
-BENCHMARK(OrphanageEraseForPeer, benchmark::PriorityLevel::LOW);
+BENCHMARK(OrphanageSinglePeerEviction);
+BENCHMARK(OrphanageMultiPeerEviction);
+BENCHMARK(OrphanageEraseForBlock);
+BENCHMARK(OrphanageEraseForPeer);

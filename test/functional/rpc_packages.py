@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2021-2022 The Bitcoin Core developers
+# Copyright (c) 2021-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """RPCs that handle raw transaction packages."""
@@ -44,10 +44,10 @@ class RPCPackagesTest(BitcoinTestFramework):
         be used to test packages where the order does not matter. The ordering of transactions in package_hex and
         testres_expected must match.
         """
-        shuffled_indeces = list(range(len(package_hex)))
-        random.shuffle(shuffled_indeces)
-        shuffled_package = [package_hex[i] for i in shuffled_indeces]
-        shuffled_testres = [testres_expected[i] for i in shuffled_indeces]
+        shuffled_indices = list(range(len(package_hex)))
+        random.shuffle(shuffled_indices)
+        shuffled_package = [package_hex[i] for i in shuffled_indices]
+        shuffled_testres = [testres_expected[i] for i in shuffled_indices]
         assert_equal(shuffled_testres, self.nodes[0].testmempoolaccept(shuffled_package))
 
     def run_test(self):
@@ -123,8 +123,8 @@ class RPCPackagesTest(BitcoinTestFramework):
         assert_equal(testres_bad_sig, self.independent_txns_testres + [{
             "txid": tx_bad_sig_txid,
             "wtxid": tx_bad_sig_wtxid, "allowed": False,
-            "reject-reason": "mandatory-script-verify-flag-failed (Operation not valid with the current stack size)",
-            "reject-details": "mandatory-script-verify-flag-failed (Operation not valid with the current stack size), " +
+            "reject-reason": "mempool-script-verify-flag-failed (Operation not valid with the current stack size)",
+            "reject-details": "mempool-script-verify-flag-failed (Operation not valid with the current stack size), " +
                               f"input 0 of {tx_bad_sig_txid} (wtxid {tx_bad_sig_wtxid}), spending {coin['txid']}:{coin['vout']}"
         }])
 
@@ -263,13 +263,23 @@ class RPCPackagesTest(BitcoinTestFramework):
         ])
 
         submitres = node.submitpackage([tx1["hex"], tx2["hex"], tx_child["hex"]])
-        assert_equal(submitres, {'package_msg': 'conflict-in-package', 'tx-results': {}, 'replaced-transactions': []})
+        expected = {
+            tx1["wtxid"]: {"txid": tx1["txid"], "error": "package-not-validated"},
+            tx2["wtxid"]: {"txid": tx2["txid"], "error": "package-not-validated"},
+            tx_child["wtxid"]: {"txid": tx_child["txid"], "error": "package-not-validated"},
+        }
+        assert_equal(submitres, {"package_msg": "conflict-in-package", "tx-results": expected,"replaced-transactions": []})
 
         # Submit tx1 to mempool, then try the same package again
         node.sendrawtransaction(tx1["hex"])
 
         submitres = node.submitpackage([tx1["hex"], tx2["hex"], tx_child["hex"]])
-        assert_equal(submitres, {'package_msg': 'conflict-in-package', 'tx-results': {}, 'replaced-transactions': []})
+        expected = {
+            tx1["wtxid"]: {"txid": tx1["txid"], "error": "package-not-validated"},
+            tx2["wtxid"]: {"txid": tx2["txid"], "error": "package-not-validated"},
+            tx_child["wtxid"]: {"txid": tx_child["txid"], "error": "package-not-validated"},
+        }
+        assert_equal(submitres, {"package_msg": "conflict-in-package", "tx-results": expected,"replaced-transactions": []})
         assert tx_child["txid"] not in node.getrawmempool()
 
         # without the in-mempool ancestor tx1 included in the call, tx2 can be submitted, but

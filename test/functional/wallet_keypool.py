@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2022 The Bitcoin Core developers
+# Copyright (c) 2014-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet keypool and interaction with wallet encryption/locking."""
@@ -7,6 +7,8 @@
 from decimal import Decimal
 
 from test_framework.test_framework import BitcoinTestFramework
+from test_framework.descriptors import descsum_create
+from test_framework.extendedkey import ExtendedPrivateKey
 from test_framework.util import (
     assert_equal,
     assert_not_equal,
@@ -32,39 +34,39 @@ class KeyPoolTest(BitcoinTestFramework):
         nodes[0].walletpassphrase('test', 10)
         nodes[0].importdescriptors([
             {
-                "desc": "wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/0h/*h)#y4dfsj7n",
+                "desc": descsum_create(f"wpkh({ExtendedPrivateKey.generate().to_string()}/0h/*h)"),
                 "timestamp": "now",
                 "range": [0,0],
                 "active": True
             },
             {
-                "desc": "pkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/1h/*h)#a0nyvl0k",
+                "desc": descsum_create(f"pkh({ExtendedPrivateKey.generate().to_string()}/1h/*h)"),
                 "timestamp": "now",
                 "range": [0,0],
                 "active": True
             },
             {
-                "desc": "sh(wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/2h/*h))#lmeu2axg",
+                "desc": descsum_create(f"sh(wpkh({ExtendedPrivateKey.generate().to_string()}/2h/*h))"),
                 "timestamp": "now",
                 "range": [0,0],
                 "active": True
             },
             {
-                "desc": "wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/3h/*h)#jkl636gm",
+                "desc": descsum_create(f"wpkh({ExtendedPrivateKey.generate().to_string()}/3h/*h)"),
                 "timestamp": "now",
                 "range": [0,0],
                 "active": True,
                 "internal": True
             },
             {
-                "desc": "pkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/4h/*h)#l3crwaus",
+                "desc": descsum_create(f"pkh({ExtendedPrivateKey.generate().to_string()}/4h/*h)"),
                 "timestamp": "now",
                 "range": [0,0],
                 "active": True,
                 "internal": True
             },
             {
-                "desc": "sh(wpkh(tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK/5h/*h))#qg8wa75f",
+                "desc": descsum_create(f"sh(wpkh({ExtendedPrivateKey.generate().to_string()}/5h/*h))"),
                 "timestamp": "now",
                 "range": [0,0],
                 "active": True,
@@ -110,7 +112,7 @@ class KeyPoolTest(BitcoinTestFramework):
         addr.add(nodes[0].getnewaddress(address_type="bech32"))
         addr.add(nodes[0].getnewaddress(address_type="bech32"))
         addr.add(nodes[0].getnewaddress(address_type="bech32"))
-        assert len(addr) == 6
+        assert_equal(len(addr), 6)
         # remember keypool sizes
         wi = nodes[0].getwalletinfo()
         kp_size_before = [wi['keypoolsize_hd_internal'], wi['keypoolsize']]

@@ -53,6 +53,10 @@ To build dependencies for the current arch+OS:
 
     pkg_add bash cmake curl gmake gtar
 
+Skip the following packages if you don't intend to use the GUI and will build with [`NO_QT=1`](#dependency-options):
+
+    pkg_add bison ninja
+
 To build dependencies for the current arch+OS:
 
     gmake
@@ -90,13 +94,12 @@ The following can be set when running make: `make FOO=bar`
 - `C_STANDARD`: Set the C standard version used. Defaults to `c11`.
 - `CXX_STANDARD`: Set the C++ standard version used. Defaults to `c++20`.
 - `NO_BOOST`: Don't download/build/cache Boost
-- `NO_LIBEVENT`: Don't download/build/cache Libevent
 - `NO_QT`: Don't download/build/cache Qt and its dependencies
 - `NO_QR`: Don't download/build/cache packages needed for enabling qrencode
 - `NO_ZMQ`: Don't download/build/cache packages needed for enabling ZeroMQ
 - `NO_WALLET`: Don't download/build/cache libs needed to enable the wallet (SQLite)
 - `NO_USDT`: Don't download/build/cache packages needed for enabling USDT tracepoints
-- `MULTIPROCESS`: Build libmultiprocess (experimental)
+- `NO_IPC`: Don't build Cap’n Proto and libmultiprocess packages. Default on Windows.
 - `DEBUG`: Disable some optimizations and enable more runtime checking
 - `HOST_ID_SALT`: Optional salt to use when generating host package ids
 - `BUILD_ID_SALT`: Optional salt to use when generating build package ids
@@ -107,6 +110,18 @@ The following can be set when running make: `make FOO=bar`
 
 If some packages are not built, for example `make NO_WALLET=1`, the appropriate CMake cache
 variables will be set when generating the Bitcoin Core buildsystem. In this case, `-DENABLE_WALLET=OFF`.
+
+## Compiler Configuration
+
+`CC` and `CXX` control target compilers. `build_CC` and `build_CXX` control
+compilers for native build tools (e.g. `native_capnp`, `native_qt`), which
+default to `gcc`/`g++` on Linux and `clang`/`clang++` on macOS/FreeBSD/OpenBSD
+(see `./depends/builders/*.mk`).
+
+On a system where the default build compiler is not available (e.g. Linux
+without gcc/g++), you could use the following to build all packages using clang:
+
+    make -C depends build_CC=clang build_CXX=clang++ CC=clang CXX=clang++
 
 ## Cross compilation
 
@@ -122,8 +137,9 @@ Common `host-platform-triplet`s for cross compilation are:
 
 - `i686-pc-linux-gnu` for Linux x86 32 bit
 - `x86_64-pc-linux-gnu` for Linux x86 64 bit
-- `x86_64-w64-mingw32` for Win64
-- `x86_64-apple-darwin` for macOS
+- `x86_64-w64-mingw32` for Windows using MSVCRT
+- `x86_64-w64-mingw32ucrt` for Windows using UCRT
+- `x86_64-apple-darwin` for Intel macOS
 - `arm64-apple-darwin` for ARM macOS
 - `arm-linux-gnueabihf` for Linux ARM 32 bit
 - `aarch64-linux-gnu` for Linux ARM 64 bit
@@ -144,9 +160,13 @@ proceeding with a cross-compile. Under the depends directory, create a
 subdirectory named `SDKs`. Then, place the extracted SDK under this new directory.
 For more information, see [SDK Extraction](../contrib/macdeploy/README.md#sdk-extraction).
 
-#### For Win64 cross compilation
+#### For Windows cross compilation using MSVCRT
 
     apt install g++-mingw-w64-x86-64-posix
+
+#### For Windows cross compilation using UCRT
+
+    apt install g++-mingw-w64-ucrt64
 
 #### For linux (including i386, ARM) cross compilation
 
