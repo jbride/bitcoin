@@ -20,15 +20,15 @@ BOOST_AUTO_TEST_CASE(test_slh_dsa_keygen)
     std::cout << "Generated " << random_data.size() << " bytes of entropy" << std::endl;
     
     // Allocate buffers for keys
-    std::vector<uint8_t> public_key(SLH_DSA_SHAKE_128S_PUBLIC_KEY_SIZE);
-    std::vector<uint8_t> secret_key(SLH_DSA_SHAKE_128S_SECRET_KEY_SIZE);
+    std::vector<uint8_t> public_key(SLH_DSA_SHA2_128S_PUBLIC_KEY_SIZE);
+    std::vector<uint8_t> secret_key(SLH_DSA_SHA2_128S_SECRET_KEY_SIZE);
     
-    std::cout << "Public key size: " << SLH_DSA_SHAKE_128S_PUBLIC_KEY_SIZE << " bytes" << std::endl;
-    std::cout << "Secret key size: " << SLH_DSA_SHAKE_128S_SECRET_KEY_SIZE << " bytes" << std::endl;
-    std::cout << "Signature size: " << SLH_DSA_SHAKE_128S_SIGNATURE_SIZE << " bytes" << std::endl;
+    std::cout << "Public key size: " << SLH_DSA_SHA2_128S_PUBLIC_KEY_SIZE << " bytes" << std::endl;
+    std::cout << "Secret key size: " << SLH_DSA_SHA2_128S_SECRET_KEY_SIZE << " bytes" << std::endl;
+    std::cout << "Signature size: " << SLH_DSA_SHA2_128S_SIGNATURE_SIZE << " bytes" << std::endl;
     
     // Generate key pair using direct SLH-DSA API
-    int result = slh_dsa_shake_128s_keygen(
+    int result = slh_dsa_sha2_128s_keygen(
         public_key.data(),
         secret_key.data(),
         random_data.data(),
@@ -55,10 +55,10 @@ BOOST_AUTO_TEST_CASE(test_slh_dsa_keygen)
     std::cout << "Message: " << test_message << std::endl;
     
     // Generate signature
-    std::vector<uint8_t> signature(SLH_DSA_SHAKE_128S_SIGNATURE_SIZE);
+    std::vector<uint8_t> signature(SLH_DSA_SHA2_128S_SIGNATURE_SIZE);
     size_t signature_length = 0;
     
-    result = slh_dsa_shake_128s_sign(
+    result = slh_dsa_sha2_128s_sign(
         signature.data(),
         &signature_length,
         message_bytes.data(),
@@ -77,7 +77,7 @@ BOOST_AUTO_TEST_CASE(test_slh_dsa_keygen)
     std::cout << "Signature (first 64 bytes, hex): " << HexStr(std::span<const uint8_t>(signature.data(), std::min(signature_length, size_t(64)))) << "..." << std::endl;
     
     // Verify signature
-    result = slh_dsa_shake_128s_verify(
+    result = slh_dsa_sha2_128s_verify(
         signature.data(),
         signature_length,
         message_bytes.data(),
@@ -97,7 +97,7 @@ BOOST_AUTO_TEST_CASE(test_slh_dsa_keygen)
     std::string wrong_message = "Wrong message";
     std::vector<uint8_t> wrong_message_bytes(wrong_message.begin(), wrong_message.end());
     
-    result = slh_dsa_shake_128s_verify(
+    result = slh_dsa_sha2_128s_verify(
         signature.data(),
         signature_length,
         wrong_message_bytes.data(),
@@ -121,7 +121,7 @@ BOOST_AUTO_TEST_CASE(test_slh_dsa_high_level_api)
     
     // Create keypair structure
     bitcoin_pqc_keypair_t keypair;
-    keypair.algorithm = BITCOIN_PQC_SLH_DSA_SHAKE_128S;
+    keypair.algorithm = BITCOIN_PQC_SLH_DSA_SHA2_128S;
     keypair.public_key = nullptr;
     keypair.secret_key = nullptr;
     keypair.public_key_size = 0;
@@ -129,7 +129,7 @@ BOOST_AUTO_TEST_CASE(test_slh_dsa_high_level_api)
     
     // Generate key pair using high-level API
     bitcoin_pqc_error_t result = bitcoin_pqc_keygen(
-        BITCOIN_PQC_SLH_DSA_SHAKE_128S,
+        BITCOIN_PQC_SLH_DSA_SHA2_128S,
         &keypair,
         random_data.data(),
         random_data.size()
@@ -154,12 +154,12 @@ BOOST_AUTO_TEST_CASE(test_slh_dsa_high_level_api)
     std::vector<uint8_t> message_bytes(test_message.begin(), test_message.end());
     
     bitcoin_pqc_signature_t signature;
-    signature.algorithm = BITCOIN_PQC_SLH_DSA_SHAKE_128S;
+    signature.algorithm = BITCOIN_PQC_SLH_DSA_SHA2_128S;
     signature.signature = nullptr;
     signature.signature_size = 0;
     
     result = bitcoin_pqc_sign(
-        BITCOIN_PQC_SLH_DSA_SHAKE_128S,
+        BITCOIN_PQC_SLH_DSA_SHA2_128S,
         static_cast<uint8_t*>(keypair.secret_key),
         keypair.secret_key_size,
         message_bytes.data(),
@@ -179,7 +179,7 @@ BOOST_AUTO_TEST_CASE(test_slh_dsa_high_level_api)
     
     // Test verification with high-level API
     result = bitcoin_pqc_verify(
-        BITCOIN_PQC_SLH_DSA_SHAKE_128S,
+        BITCOIN_PQC_SLH_DSA_SHA2_128S,
         static_cast<uint8_t*>(keypair.public_key),
         keypair.public_key_size,
         message_bytes.data(),

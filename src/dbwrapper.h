@@ -9,19 +9,27 @@
 #include <serialize.h>
 #include <span.h>
 #include <streams.h>
+#include <util/byte_units.h>
 #include <util/check.h>
 #include <util/fs.h>
+#include <util/obfuscation.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 
+namespace leveldb {
+class Env;
+} // namespace leveldb
+
 static const size_t DBWRAPPER_PREALLOC_KEY_SIZE = 64;
 static const size_t DBWRAPPER_PREALLOC_VALUE_SIZE = 1024;
-static const size_t DBWRAPPER_MAX_FILE_SIZE = 32 << 20; // 32 MiB
+static const size_t DBWRAPPER_MAX_FILE_SIZE{32_MiB};
 
 //! User-controlled performance and debug options.
 struct DBOptions {
@@ -34,7 +42,7 @@ struct DBParams {
     //! Location in the filesystem where leveldb data will be stored.
     fs::path path;
     //! Configures various leveldb cache settings.
-    size_t cache_bytes;
+    uint64_t cache_bytes;
     //! If true, use leveldb's memory environment.
     bool memory_only = false;
     //! If true, remove all existing data.
@@ -42,8 +50,16 @@ struct DBParams {
     //! If true, store data obfuscated via simple XOR. If false, XOR with a
     //! zero'd byte array.
     bool obfuscate = false;
+    //! If true, build a LevelDB bloom filter to accelerate point lookups.
+    bool bloom_filter = true;
     //! Passed-through options.
     DBOptions options{};
+    //! If non-null, use this as the leveldb::Env instead of the default.
+    //! Caller retains ownership.
+    leveldb::Env* testing_env = nullptr;
+    //! Maximum LevelDB SST file size. Larger values reduce the frequency
+    //! of compactions but increase their duration.
+    size_t max_file_size = DBWRAPPER_MAX_FILE_SIZE;
 };
 
 class dbwrapper_error : public std::runtime_error
@@ -78,10 +94,10 @@ private:
     struct WriteBatchImpl;
     const std::unique_ptr<WriteBatchImpl> m_impl_batch;
 
-    DataStream ssKey{};
-    DataStream ssValue{};
+    DataStream m_key_scratch{};
+    DataStream m_value_scratch{};
 
-    void WriteImpl(std::span<const std::byte> key, DataStream& ssValue);
+    void WriteImpl(std::span<const std::byte> key, DataStream& value);
     void EraseImpl(std::span<const std::byte> key);
 
 public:
@@ -95,22 +111,18 @@ public:
     template <typename K, typename V>
     void Write(const K& key, const V& value)
     {
-        ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
-        ssValue.reserve(DBWRAPPER_PREALLOC_VALUE_SIZE);
-        ssKey << key;
-        ssValue << value;
-        WriteImpl(ssKey, ssValue);
-        ssKey.clear();
-        ssValue.clear();
+        ScopedDataStreamUsage scoped_key{m_key_scratch}, scoped_value{m_value_scratch};
+        m_key_scratch << key;
+        m_value_scratch << value;
+        WriteImpl(m_key_scratch, m_value_scratch);
     }
 
     template <typename K>
     void Erase(const K& key)
     {
-        ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
-        ssKey << key;
-        EraseImpl(ssKey);
-        ssKey.clear();
+        ScopedDataStreamUsage scoped_key{m_key_scratch};
+        m_key_scratch << key;
+        EraseImpl(m_key_scratch);
     }
 
     size_t ApproximateSize() const;
@@ -124,6 +136,7 @@ public:
 private:
     const CDBWrapper &parent;
     const std::unique_ptr<IteratorImpl> m_impl_iter;
+    DataStream m_scratch{};
 
     void SeekImpl(std::span<const std::byte> key);
     std::span<const std::byte> GetKeyImpl() const;
@@ -143,17 +156,16 @@ public:
     void SeekToFirst();
 
     template<typename K> void Seek(const K& key) {
-        DataStream ssKey{};
-        ssKey.reserve(DBWRAPPER_PREALLOC_KEY_SIZE);
-        ssKey << key;
-        SeekImpl(ssKey);
+        ScopedDataStreamUsage scoped_scratch{m_scratch};
+        m_scratch << key;
+        SeekImpl(m_scratch);
     }
 
     void Next();
 
     template<typename K> bool GetKey(K& key) {
         try {
-            DataStream ssKey{GetKeyImpl()};
+            SpanReader ssKey{GetKeyImpl()};
             ssKey >> key;
         } catch (const std::exception&) {
             return false;
@@ -163,9 +175,10 @@ public:
 
     template<typename V> bool GetValue(V& value) {
         try {
-            DataStream ssValue{GetValueImpl()};
-            dbwrapper_private::GetObfuscation(parent)(ssValue);
-            ssValue >> value;
+            ScopedDataStreamUsage scoped_scratch{m_scratch};
+            m_scratch.write(GetValueImpl());
+            dbwrapper_private::GetObfuscation(parent)(m_scratch);
+            m_scratch >> value;
         } catch (const std::exception&) {
             return false;
         }
@@ -189,13 +202,7 @@ private:
     Obfuscation m_obfuscation;
 
     //! obfuscation key storage key, null-prefixed to avoid collisions
-    inline static const std::string OBFUSCATION_KEY_KEY{"\000obfuscate_key", 14}; // explicit size to avoid truncation at leading \0
-
-    //! path to filesystem storage
-    const fs::path m_path;
-
-    //! whether or not the database resides in memory
-    bool m_is_memory;
+    inline static const std::string OBFUSCATION_KEY{"\000obfuscate_key", 14}; // explicit size to avoid truncation at leading \0
 
     std::optional<std::string> ReadImpl(std::span<const std::byte> key) const;
     bool ExistsImpl(std::span<const std::byte> key) const;
@@ -220,9 +227,9 @@ public:
             return false;
         }
         try {
-            DataStream ssValue{MakeByteSpan(*strValue)};
+            std::span ssValue{MakeWritableByteSpan(*strValue)};
             m_obfuscation(ssValue);
-            ssValue >> value;
+            SpanReader{ssValue} >> value;
         } catch (const std::exception&) {
             return false;
         }
@@ -230,19 +237,11 @@ public:
     }
 
     template <typename K, typename V>
-    bool Write(const K& key, const V& value, bool fSync = false)
+    void Write(const K& key, const V& value, bool fSync = false)
     {
         CDBBatch batch(*this);
         batch.Write(key, value);
-        return WriteBatch(batch, fSync);
-    }
-
-    //! @returns filesystem path to the on-disk data.
-    std::optional<fs::path> StoragePath() {
-        if (m_is_memory) {
-            return {};
-        }
-        return m_path;
+        WriteBatch(batch, fSync);
     }
 
     template <typename K>
@@ -255,14 +254,20 @@ public:
     }
 
     template <typename K>
-    bool Erase(const K& key, bool fSync = false)
+    void Erase(const K& key, bool fSync = false)
     {
         CDBBatch batch(*this);
         batch.Erase(key);
-        return WriteBatch(batch, fSync);
+        WriteBatch(batch, fSync);
     }
 
-    bool WriteBatch(CDBBatch& batch, bool fSync = false);
+    void WriteBatch(CDBBatch& batch, bool fSync = false);
+
+    //! Perform a blocking full compaction of the underlying LevelDB.
+    void CompactFull();
+
+    //! Return a LevelDB property value, if available.
+    std::optional<std::string> GetProperty(const std::string& property) const;
 
     // Get an estimate of LevelDB memory usage (in bytes).
     size_t DynamicMemoryUsage() const;

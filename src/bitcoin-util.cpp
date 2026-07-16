@@ -1,4 +1,4 @@
-// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2009-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,6 +10,7 @@
 #include <chainparamsbase.h>
 #include <clientversion.h>
 #include <common/args.h>
+#include <common/license_info.h>
 #include <common/system.h>
 #include <compat/compat.h>
 #include <core_io.h>
@@ -35,6 +36,7 @@ static void SetupBitcoinUtilArgs(ArgsManager &argsman)
     argsman.AddArg("-version", "Print version and exit", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 
     argsman.AddCommand("grind", "Perform proof of work on hex header string");
+    argsman.AddCommand("netmagic", "Get the network magic bytes of the selected chain");
 
     SetupChainParamsBaseOptions(argsman);
 }
@@ -149,6 +151,17 @@ static int Grind(const std::vector<std::string>& args, std::string& strPrint)
     return EXIT_SUCCESS;
 }
 
+static int NetMagic(const std::vector<std::string>& args, std::string& strPrint)
+{
+    if (!args.empty()) {
+        strPrint = "netmagic does not take arguments";
+        return EXIT_FAILURE;
+    }
+
+    strPrint = HexStr(Params().MessageStart());
+    return EXIT_SUCCESS;
+}
+
 MAIN_FUNCTION
 {
     ArgsManager& args = gArgs;
@@ -178,6 +191,8 @@ MAIN_FUNCTION
     try {
         if (cmd->command == "grind") {
             ret = Grind(cmd->args, strPrint);
+        } else if (cmd->command == "netmagic") {
+            ret = NetMagic(cmd->args, strPrint);
         } else {
             assert(false); // unknown command should be caught earlier
         }

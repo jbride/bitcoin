@@ -10,6 +10,7 @@ add_library(bitcoin_wallet STATIC EXCLUDE_FROM_ALL
   crypter.cpp
   db.cpp
   dump.cpp
+  export.cpp
   external_signer_scriptpubkeyman.cpp
   feebumper.cpp
   fees.cpp
@@ -38,8 +39,7 @@ target_link_libraries(bitcoin_wallet
   PRIVATE
     core_interface
     bitcoin_common
-    $<TARGET_NAME_IF_EXISTS:unofficial::sqlite3::sqlite3>
-    $<TARGET_NAME_IF_EXISTS:SQLite::SQLite3>
+    SQLite3::SQLite3
     univalue
     Boost::headers
     $<TARGET_NAME_IF_EXISTS:USDT::headers>

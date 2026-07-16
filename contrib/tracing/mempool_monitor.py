@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2022 The Bitcoin Core developers
+# Copyright (c) 2022-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,9 +17,9 @@ from bcc import BPF, USDT
 PROGRAM = """
 # include <uapi/linux/ptrace.h>
 
-// The longest rejection reason is 118 chars and is generated in case of SCRIPT_ERR_EVAL_FALSE by
-// strprintf("mandatory-script-verify-flag-failed (%s)", ScriptErrorString(check.GetScriptError()))
-#define MAX_REJECT_REASON_LENGTH        118
+// The longest rejection reason is 114 chars and is generated in case of SCRIPT_ERR_EVAL_FALSE by
+// strprintf("block-script-verify-flag-failed (%s)", ScriptErrorString(check.GetScriptError()))
+#define MAX_REJECT_REASON_LENGTH        114
 // The longest string returned by RemovalReasonToString() is 'sizelimit'
 #define MAX_REMOVAL_REASON_LENGTH       9
 #define HASH_LENGTH                     32

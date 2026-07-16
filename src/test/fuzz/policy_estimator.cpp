@@ -3,8 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <kernel/mempool_entry.h>
-#include <policy/fees.h>
-#include <policy/fees_args.h>
+#include <policy/fees/block_policy_estimator.h>
+#include <policy/fees/block_policy_estimator_args.h>
 #include <primitives/transaction.h>
 #include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
@@ -39,8 +39,7 @@ FUZZ_TARGET(policy_estimator, .init = initialize_policy_estimator)
         [&] { current_height = fuzzed_data_provider.ConsumeIntegralInRange<decltype(current_height)>(current_height, 1 << 30); },
     };
     advance_height();
-    LIMITED_WHILE(good_data && fuzzed_data_provider.ConsumeBool(), 10'000)
-    {
+    LIMITED_WHILE (good_data && fuzzed_data_provider.ConsumeBool(), 10'000) {
         CallOneOf(
             fuzzed_data_provider,
             [&] {
@@ -66,15 +65,14 @@ FUZZ_TARGET(policy_estimator, .init = initialize_policy_estimator)
             },
             [&] {
                 std::list<CTxMemPoolEntry> mempool_entries;
-                LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 10000)
-                {
+                LIMITED_WHILE (fuzzed_data_provider.ConsumeBool(), 10000) {
                     const std::optional<CMutableTransaction> mtx = ConsumeDeserializable<CMutableTransaction>(fuzzed_data_provider, TX_WITH_WITNESS);
                     if (!mtx) {
                         good_data = false;
                         break;
                     }
                     const CTransaction tx{*mtx};
-                    mempool_entries.emplace_back(CTxMemPoolEntry::ExplicitCopy, ConsumeTxMemPoolEntry(fuzzed_data_provider, tx, current_height));
+                    mempool_entries.push_back(ConsumeTxMemPoolEntry(fuzzed_data_provider, tx, current_height));
                 }
                 std::vector<RemovedMempoolTransactionInfo> txs;
                 txs.reserve(mempool_entries.size());
@@ -85,7 +83,7 @@ FUZZ_TARGET(policy_estimator, .init = initialize_policy_estimator)
                 block_policy_estimator.processBlock(txs, current_height);
             },
             [&] {
-                (void)block_policy_estimator.removeTx(ConsumeUInt256(fuzzed_data_provider));
+                (void)block_policy_estimator.removeTx(Txid::FromUint256(ConsumeUInt256(fuzzed_data_provider)));
             },
             [&] {
                 block_policy_estimator.FlushUnconfirmed();

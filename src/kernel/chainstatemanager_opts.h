@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2022-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,6 +22,7 @@ class CChainParams;
 class ValidationSignals;
 
 static constexpr auto DEFAULT_MAX_TIP_AGE{24h};
+static constexpr int32_t DEFAULT_PREVOUTFETCH_THREADS{8};
 
 namespace kernel {
 
@@ -46,6 +47,8 @@ struct ChainstateManagerOpts {
     ValidationSignals* signals{nullptr};
     //! Number of script check worker threads. Zero means no parallel verification.
     int worker_threads_num{0};
+    //! Number of worker threads used for prefetching block input prevouts. Zero means no parallel fetching.
+    int32_t prevoutfetch_threads_num{DEFAULT_PREVOUTFETCH_THREADS};
     size_t script_execution_cache_bytes{DEFAULT_SCRIPT_EXECUTION_CACHE_BYTES};
     size_t signature_cache_bytes{DEFAULT_SIGNATURE_CACHE_BYTES};
 };

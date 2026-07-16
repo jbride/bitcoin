@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2022 The Bitcoin Core developers
+# Copyright (c) 2014-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the REST API."""
@@ -28,7 +28,6 @@ from test_framework.wallet import (
     MiniWallet,
     getnewdestination,
 )
-from typing import Optional
 
 
 INVALID_PARAM = "abc"
@@ -56,7 +55,6 @@ class RESTTest (BitcoinTestFramework):
         self.extra_args = [["-rest", "-blockfilterindex=1"], []]
         # whitelist peers to speed up tx relay / mempool sync
         self.noban_tx_relay = True
-        self.supports_cli = False
 
     def test_rest_request(
             self,
@@ -66,13 +64,16 @@ class RESTTest (BitcoinTestFramework):
             body: str = '',
             status: int = 200,
             ret_type: RetType = RetType.JSON,
-            query_params: Optional[dict[str, typing.Any]] = None,
+            query_params: typing.Union[dict[str, typing.Any], str, None] = None,
             ) -> typing.Union[http.client.HTTPResponse, bytes, str, None]:
         rest_uri = '/rest' + uri
         if req_type in ReqType:
             rest_uri += f'.{req_type.name.lower()}'
         if query_params:
-            rest_uri += f'?{urllib.parse.urlencode(query_params)}'
+            if isinstance(query_params, str):
+                rest_uri += f'?{query_params}'
+            else:
+                rest_uri += f'?{urllib.parse.urlencode(query_params)}'
 
         conn = http.client.HTTPConnection(self.url.hostname, self.url.port)
         self.log.debug(f'{http_method} {rest_uri} {body}')
@@ -82,7 +83,7 @@ class RESTTest (BitcoinTestFramework):
             conn.request('POST', rest_uri, body)
         resp = conn.getresponse()
 
-        assert_equal(resp.status, status)
+        assert resp.status == status, f"Expected: {status}, Got: {resp.status} ({resp.reason}) - Response: {str(resp.read())}"
 
         if ret_type == RetType.OBJ:
             return resp
@@ -286,10 +287,12 @@ class RESTTest (BitcoinTestFramework):
         assert_equal(len(json_obj), 1)  # ensure that there is one header in the json response
         assert_equal(json_obj[0]['hash'], bb_hash)  # request/response hash should be the same
 
-        # Check invalid uri (% symbol at the end of the request)
-        for invalid_uri in [f"/headers/{bb_hash}%", f"/blockfilterheaders/basic/{bb_hash}%", "/mempool/contents.json?%"]:
+        # Check tolerance for invalid URI (% symbol at the end of the request)
+        for invalid_uri in [f"/headers/{bb_hash}%", f"/blockfilterheaders/basic/{bb_hash}%"]:
             resp = self.test_rest_request(invalid_uri, ret_type=RetType.OBJ, status=400)
-            assert_equal(resp.read().decode('utf-8').rstrip(), "URI parsing failed, it likely contained RFC 3986 invalid characters")
+            assert_equal(resp.read().decode('utf-8').rstrip(), f"Invalid hash: {bb_hash}%")
+        resp = self.test_rest_request("/mempool/contents.json?%", ret_type=RetType.OBJ, status=200)
+        assert_equal(resp.read().decode('utf-8').rstrip(), "{}")
 
         # Compare with normal RPC block response
         rpc_block_json = self.nodes[0].getblock(bb_hash)
@@ -455,6 +458,54 @@ class RESTTest (BitcoinTestFramework):
                 expected = [(p["scriptPubKey"], p["value"]) for p in prevouts]
                 assert_equal(expected, actual)
 
+        self.log.info("Test the /blockpart URI")
+
+        blockhash = self.nodes[0].getbestblockhash()
+        block_bin = self.test_rest_request(f"/block/{blockhash}", req_type=ReqType.BIN, ret_type=RetType.BYTES)
+        for req_type in (ReqType.BIN, ReqType.HEX):
+            def get_block_part(status: int = 200, **kwargs):
+                resp = self.test_rest_request(f"/blockpart/{blockhash}", status=status,
+                                              req_type=req_type, ret_type=RetType.BYTES, **kwargs)
+                assert isinstance(resp, bytes)
+                if req_type is ReqType.HEX and status == 200:
+                    resp = bytes.fromhex(resp.decode().strip())
+                return resp
+
+            assert_equal(block_bin, get_block_part(query_params={"offset": 0, "size": len(block_bin)}))
+
+            assert len(block_bin) >= 500
+            assert_equal(block_bin[20:320], get_block_part(query_params={"offset": 20, "size": 300}))
+            assert_equal(block_bin[-5:], get_block_part(query_params={"offset": len(block_bin) - 5, "size": 5}))
+
+            get_block_part(status=400, query_params={"offset": 10})
+            get_block_part(status=400, query_params={"size": 100})
+            get_block_part(status=400, query_params={"offset": "x"})
+            get_block_part(status=400, query_params={"size": "y"})
+            get_block_part(status=400, query_params={"offset": "x", "size": "y"})
+            get_block_part(status=400, query_params="%XY")
+            get_block_part(status=400, query_params={"offset": 0, "size": 0})
+            get_block_part(status=400, query_params={"offset": len(block_bin), "size": 0})
+            get_block_part(status=400, query_params={"offset": len(block_bin), "size": 1})
+            get_block_part(status=400, query_params={"offset": len(block_bin) + 1, "size": 1})
+            get_block_part(status=400, query_params={"offset": 0, "size": len(block_bin) + 1})
+
+        res = self.test_rest_request(f"/blockpart/{blockhash}", status=400, req_type=ReqType.BIN, ret_type=RetType.OBJ)
+        assert res.read().decode().startswith("Block part offset missing or invalid")
+
+        res = self.test_rest_request(f"/blockpart/{blockhash}", query_params={"offset":0, "size":1}, status=400, req_type=ReqType.JSON, ret_type=RetType.OBJ)
+        assert res.read().decode().startswith("JSON output is not supported for this request type")
+
+        self.log.info("Missing block data should cause REST API to fail")
+
+        self.test_rest_request(f"/block/{blockhash}", status=200, req_type=ReqType.BIN, ret_type=RetType.OBJ)
+        self.test_rest_request(f"/blockpart/{blockhash}", query_params={"offset": 0, "size": 1}, status=200, req_type=ReqType.BIN, ret_type=RetType.OBJ)
+        blk_files = list(self.nodes[0].blocks_path.glob("blk*.dat"))
+        for blk_file in blk_files:
+            blk_file.rename(blk_file.with_suffix('.bkp'))
+        self.test_rest_request(f"/block/{blockhash}", status=500, req_type=ReqType.BIN, ret_type=RetType.OBJ)
+        self.test_rest_request(f"/blockpart/{blockhash}", query_params={"offset": 0, "size": 1}, status=500, req_type=ReqType.BIN, ret_type=RetType.OBJ)
+        for blk_file in blk_files:
+            blk_file.with_suffix('.bkp').rename(blk_file)
 
         self.log.info("Test the /deploymentinfo URI")
 

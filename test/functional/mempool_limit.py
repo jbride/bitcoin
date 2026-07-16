@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2022 The Bitcoin Core developers
+# Copyright (c) 2014-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test mempool limiting together/eviction with the wallet."""
@@ -32,57 +32,6 @@ class MempoolLimitTest(BitcoinTestFramework):
             "-maxmempool=5",
         ]]
 
-    def test_rbf_carveout_disallowed(self):
-        node = self.nodes[0]
-
-        self.log.info("Check that individually-evaluated transactions in a package don't increase package limits for other subpackage parts")
-
-        # We set chain limits to 2 ancestors, 1 descendant, then try to get a parents-and-child chain of 2 in mempool
-        #
-        # A: Solo transaction to be RBF'd (to bump descendant limit for package later)
-        # B: First transaction in package, RBFs A by itself under individual evaluation, which would give it +1 descendant limit
-        # C: Second transaction in package, spends B. If the +1 descendant limit persisted, would make it into mempool
-
-        self.restart_node(0, extra_args=self.extra_args[0] + ["-limitancestorcount=2", "-limitdescendantcount=1"])
-
-        # Generate a confirmed utxo we will double-spend
-        rbf_utxo = self.wallet.send_self_transfer(
-            from_node=node,
-            confirmed_only=True
-        )["new_utxo"]
-        self.generate(node, 1)
-
-        # tx_A needs to be RBF'd, set minfee at set size
-        A_vsize = 250
-        mempoolmin_feerate = node.getmempoolinfo()["mempoolminfee"]
-        tx_A = self.wallet.send_self_transfer(
-            from_node=node,
-            fee_rate=mempoolmin_feerate,
-            target_vsize=A_vsize,
-            utxo_to_spend=rbf_utxo,
-            confirmed_only=True
-        )
-
-        # RBF's tx_A, is not yet submitted
-        tx_B = self.wallet.create_self_transfer(
-            fee=tx_A["fee"] * 4,
-            target_vsize=A_vsize,
-            utxo_to_spend=rbf_utxo,
-            confirmed_only=True
-        )
-
-        # Spends tx_B's output, too big for cpfp carveout (because that would also increase the descendant limit by 1)
-        non_cpfp_carveout_vsize = 10001  # EXTRA_DESCENDANT_TX_SIZE_LIMIT + 1
-        tx_C = self.wallet.create_self_transfer(
-            target_vsize=non_cpfp_carveout_vsize,
-            fee_rate=mempoolmin_feerate,
-            utxo_to_spend=tx_B["new_utxo"],
-            confirmed_only=True
-        )
-        res = node.submitpackage([tx_B["hex"], tx_C["hex"]])
-        assert_equal(res["package_msg"], "transaction failed")
-        assert "too-long-mempool-chain" in res["tx-results"][tx_C["wtxid"]]["error"]
-
     def test_mid_package_eviction_success(self):
         node = self.nodes[0]
         self.log.info("Check a package where each parent passes the current mempoolminfee but a parent could be evicted before getting child's descendant feerate")
@@ -92,8 +41,7 @@ class MempoolLimitTest(BitcoinTestFramework):
         assert_equal(node.getrawmempool(), [])
 
         # Restarting the node resets mempool minimum feerate
-        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00001000'))
-        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00001000'))
+        assert_equal(node.getmempoolinfo()['minrelaytxfee'], node.getmempoolinfo()["mempoolminfee"])
 
         fill_mempool(self, node)
         current_info = node.getmempoolinfo()
@@ -184,8 +132,7 @@ class MempoolLimitTest(BitcoinTestFramework):
         self.restart_node(0, extra_args=self.extra_args[0])
 
         # Restarting the node resets mempool minimum feerate
-        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00001000'))
-        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00001000'))
+        assert_equal(node.getmempoolinfo()['minrelaytxfee'], node.getmempoolinfo()["mempoolminfee"])
 
         fill_mempool(self, node)
         current_info = node.getmempoolinfo()
@@ -208,7 +155,7 @@ class MempoolLimitTest(BitcoinTestFramework):
         # coin is no longer available, but the cache could still contain the tx.
         cpfp_parent = self.wallet.create_self_transfer(
             utxo_to_spend=replaced_tx["new_utxo"],
-            fee_rate=mempoolmin_feerate - Decimal('0.00001'),
+            fee_rate=mempoolmin_feerate - Decimal('0.000001'),
             confirmed_only=True)
 
         self.wallet.rescan_utxos()
@@ -232,7 +179,7 @@ class MempoolLimitTest(BitcoinTestFramework):
         # Package should be submitted, temporarily exceeding maxmempool, and then evicted.
         res = node.submitpackage(package_hex)
         assert_equal(res["package_msg"], "transaction failed")
-        assert len([tx_res for _, tx_res in res["tx-results"].items() if "error" in tx_res and tx_res["error"] == "bad-txns-inputs-missingorspent"])
+        assert "bad-txns-inputs-missingorspent" in [tx_res["error"] for _, tx_res in res["tx-results"].items() if "error" in tx_res]
 
         # Maximum size must never be exceeded.
         assert_greater_than(node.getmempoolinfo()["maxmempool"], node.getmempoolinfo()["bytes"])
@@ -256,8 +203,7 @@ class MempoolLimitTest(BitcoinTestFramework):
 
         relayfee = node.getnetworkinfo()['relayfee']
         self.log.info('Check that mempoolminfee is minrelaytxfee')
-        assert_equal(node.getmempoolinfo()['minrelaytxfee'], Decimal('0.00001000'))
-        assert_equal(node.getmempoolinfo()['mempoolminfee'], Decimal('0.00001000'))
+        assert_equal(node.getmempoolinfo()['minrelaytxfee'], node.getmempoolinfo()["mempoolminfee"])
 
         fill_mempool(self, node)
 
@@ -315,9 +261,9 @@ class MempoolLimitTest(BitcoinTestFramework):
         target_vsize_each = 50000
         assert_greater_than(target_vsize_each * 2 * 3, node.getmempoolinfo()["maxmempool"] - node.getmempoolinfo()["bytes"])
         # Should be a true CPFP: parent's feerate is just below mempool min feerate
-        parent_feerate = mempoolmin_feerate - Decimal("0.000001")  # 0.1 sats/vbyte below min feerate
+        parent_feerate = mempoolmin_feerate - Decimal("0.0000001")  # 0.01 sats/vbyte below min feerate
         # Parent + child is above mempool minimum feerate
-        child_feerate = (worst_feerate_btcvb * 1000) - Decimal("0.000001")  # 0.1 sats/vbyte below worst feerate
+        child_feerate = (worst_feerate_btcvb * 1000) - Decimal("0.0000001")  # 0.01 sats/vbyte below worst feerate
         # However, when eviction is triggered, these transactions should be at the bottom.
         # This assertion assumes parent and child are the same size.
         miniwallet.rescan_utxos()
@@ -339,7 +285,6 @@ class MempoolLimitTest(BitcoinTestFramework):
 
         self.test_mid_package_eviction_success()
         self.test_mid_package_replacement()
-        self.test_rbf_carveout_disallowed()
 
 
 if __name__ == '__main__':
